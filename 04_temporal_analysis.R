@@ -5,6 +5,9 @@ library(data.table)
 library(ggplot2)
 library(lubridate)
 
+# Memory optimization settings
+setDTthreads(1)  # Reduce parallel threads to save memory
+
 # Load paths and data
 load("paths.Rdata")
 region <- 'europe_med'
@@ -16,8 +19,8 @@ exeves <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 cat("Calculating annual statistics...\n")
 annual_stats <- exeves[!is.na(event_80_95_id), .(
   n_events = uniqueN(event_80_95_id),
-  total_days = .N,
-  mean_duration = mean(.N),
+  total_days = as.numeric(.N),
+  mean_duration = mean(as.numeric(.N)),
   total_evap = sum(value)
 ), .(year = year(date), grid_id)][, .(
   events_per_cell = mean(n_events),
@@ -25,6 +28,7 @@ annual_stats <- exeves[!is.na(event_80_95_id), .(
   mean_duration = mean(mean_duration),
   total_evap = sum(total_evap)
 ), year]
+gc()
 
 # Monthly climatology
 monthly_stats <- exeves[!is.na(event_80_95_id), .(
@@ -32,6 +36,7 @@ monthly_stats <- exeves[!is.na(event_80_95_id), .(
 ), .(month = month(date, label = TRUE), grid_id)][, .(
   events_per_cell = mean(n_events)
 ), month]
+gc()
 
 # Seasonal statistics
 seasonal_stats <- exeves[!is.na(event_80_95_id), .(
@@ -40,13 +45,14 @@ seasonal_stats <- exeves[!is.na(event_80_95_id), .(
   events_per_cell = mean(n_events),
   total_events = sum(n_events)
 ), .(season, period)]
+gc()
 
 # Create plots
 cat("Creating plots...\n")
 
 # Plot 1: Annual time series
 p1 <- ggplot(annual_stats, aes(x = year, y = events_per_cell)) +
-  geom_line(color = "steelblue", size = 1) +
+  geom_line(color = "steelblue", linewidth = 1) +
   geom_smooth(method = "lm", se = TRUE, color = "darkred", linetype = "dashed") +
   geom_vline(xintercept = 2001.5, linetype = "dotted", color = "gray40") +
   labs(title = "Annual Extreme Event Frequency",
@@ -60,6 +66,7 @@ p1 <- ggplot(annual_stats, aes(x = year, y = events_per_cell)) +
 
 ggsave(paste0(PATH_OUTPUT_FIGURES, "timeseries_annual.png"), 
        p1, width = 10, height = 6, dpi = 300)
+rm(p1); gc()
 
 # Plot 2: Monthly climatology
 p2 <- ggplot(monthly_stats, aes(x = month, y = events_per_cell)) +
@@ -76,6 +83,7 @@ p2 <- ggplot(monthly_stats, aes(x = month, y = events_per_cell)) +
 
 ggsave(paste0(PATH_OUTPUT_FIGURES, "climatology_monthly.png"), 
        p2, width = 10, height = 6, dpi = 300)
+rm(p2); gc()
 
 # Plot 3: Seasonal comparison between periods
 seasonal_comparison <- dcast(seasonal_stats, season ~ period, value.var = "events_per_cell")
@@ -98,6 +106,7 @@ p3 <- ggplot(seasonal_comparison_long, aes(x = season, y = events, fill = period
 
 ggsave(paste0(PATH_OUTPUT_FIGURES, "seasonal_comparison.png"), 
        p3, width = 10, height = 6, dpi = 300)
+rm(p3, seasonal_comparison, seasonal_comparison_long); gc()
 
 # Plot 4: Event duration over time
 duration_annual <- exeves[!is.na(event_80_95_id), .N, 
@@ -110,7 +119,7 @@ duration_annual <- exeves[!is.na(event_80_95_id), .N,
 
 p4 <- ggplot(duration_annual, aes(x = year, y = mean_duration)) +
   geom_ribbon(aes(ymin = q25, ymax = q75), fill = "steelblue", alpha = 0.3) +
-  geom_line(color = "steelblue", size = 1) +
+  geom_line(color = "steelblue", linewidth = 1) +
   geom_smooth(method = "lm", se = TRUE, color = "darkred", linetype = "dashed") +
   geom_vline(xintercept = 2001.5, linetype = "dotted", color = "gray40") +
   labs(title = "Event Duration Trends",
@@ -124,6 +133,7 @@ p4 <- ggplot(duration_annual, aes(x = year, y = mean_duration)) +
 
 ggsave(paste0(PATH_OUTPUT_FIGURES, "timeseries_duration.png"), 
        p4, width = 10, height = 6, dpi = 300)
+rm(p4, duration_annual); gc()
 
 # Statistical tests
 cat("\n=== Temporal Trend Analysis ===\n")
@@ -165,4 +175,8 @@ summary_table <- data.table(
 write.csv(summary_table, paste0(PATH_OUTPUT_TABLES, "temporal_summary.csv"), row.names = FALSE)
 
 cat("\nPlots saved to:", PATH_OUTPUT_FIGURES, "\n")
+
+rm(exeves, annual_stats, monthly_stats, seasonal_stats, trend_model, period_comparison, summary_table)
+gc()
+
 cat("Temporal analysis complete!\n")
