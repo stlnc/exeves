@@ -112,9 +112,9 @@ rm(p3, seasonal_comparison, seasonal_comparison_long); gc()
 duration_annual <- exeves[!is.na(event_80_95_id), .N, 
                          .(event_80_95_id, grid_id, year = year(date))][, .(
   mean_duration = mean(N),
-  median_duration = median(N),
-  q25 = quantile(N, 0.25),
-  q75 = quantile(N, 0.75)
+  median_duration = as.numeric(median(N)),
+  q25 = as.numeric(quantile(N, 0.25)),
+  q75 = as.numeric(quantile(N, 0.75))
 ), year]
 
 p4 <- ggplot(duration_annual, aes(x = year, y = mean_duration)) +
