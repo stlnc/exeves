@@ -1,72 +1,161 @@
-# Master script to run complete ExEvEs analysis workflow
-# Runs all analysis steps in sequence
+# Master script to run the complete ExEvEs analysis workflow
+# Replicates imarkonis/ithaca/projects/exeves/stable/czechia/ up to 07c
+# Adapted for Europe/Mediterranean using GLEAM evaporation + MSWEP precipitation
 
-cat("===========================================\n")
-cat("  ExEvEs Analysis - Europe/Mediterranean  \n")
-cat("===========================================\n\n")
+cat("=====================================================\n")
+cat("  ExEvEs Analysis - Europe / Mediterranean Region    \n")
+cat("  Evaporation (GLEAM) + Precipitation (MSWEP)       \n")
+cat("=====================================================\n\n")
 
 start_time <- Sys.time()
 
-# Check if data file exists
-if (!file.exists("gleam_e_mm_europe_med.nc")) {
-  stop("ERROR: Cannot find 'gleam_e_mm_europe_med.nc' in current directory!\n",
-       "Please make sure the NetCDF file is in: ", getwd())
-}
-
-cat("Data file found: gleam_e_mm_europe_med.nc\n\n")
-
-# Step 0: Initialize
-cat("STEP 0: Initializing paths...\n")
+#---------------------------------------------------------------
+# STEP 0: Initialize paths, constants, palettes
+#---------------------------------------------------------------
+cat("STEP 00: Initializing paths & constants...\n")
 cat("-------------------------------------------\n")
 source("00_initialize.R")
-cat("\n")
 
-# Step 1: Read and preprocess
-cat("\nSTEP 1: Reading and preprocessing data...\n")
+# Verify raw data exist
+stopifnot("Evaporation NetCDF not found" = file.exists(EVAP_NC_FILE))
+stopifnot("Precipitation NetCDF not found" = file.exists(PREC_NC_FILE))
+cat("  Both raw NetCDF files found.\n\n")
+
+#---------------------------------------------------------------
+# STEP 1: Read & align GLEAM + MSWEP data
+#---------------------------------------------------------------
+cat("STEP 01: Reading & aligning NetCDF data...\n")
 cat("-------------------------------------------\n")
-cat("This may take 10-30 minutes...\n")
-source("01_read_preprocess_data.R")
+cat("  (this may take 10-30 min for large grids)\n")
+source("01_read_data.R")
 cat("\n")
 
-# Step 2: Statistical properties
-cat("\nSTEP 2: Computing statistical properties...\n")
+#---------------------------------------------------------------
+# STEP 2: ExEvE identification (4 definitions)
+#---------------------------------------------------------------
+cat("STEP 02: Preprocessing – ExEvE identification...\n")
 cat("-------------------------------------------\n")
-source("02_stat_properties.R")
+cat("  (pentad standardisation + quantile regression)\n")
+source("02_preprocessing.R")
 cat("\n")
 
-# Step 3: Spatial maps
-cat("\nSTEP 3: Creating spatial maps...\n")
+#---------------------------------------------------------------
+# STEP 3: Temporal clustering (ACF analysis)
+#---------------------------------------------------------------
+cat("STEP 03: Temporal clustering...\n")
 cat("-------------------------------------------\n")
-source("03_spatial_maps.R")
+source("03_temporal_clustering.R")
 cat("\n")
 
-# Step 4: Temporal analysis
-cat("\nSTEP 4: Analyzing temporal patterns...\n")
+#---------------------------------------------------------------
+# STEP 4: Statistical properties of event definitions
+#---------------------------------------------------------------
+cat("STEP 04: Event statistical properties...\n")
 cat("-------------------------------------------\n")
-source("04_temporal_analysis.R")
+source("04_stat_properties.R")
 cat("\n")
 
-# Summary
+#---------------------------------------------------------------
+# STEP 5a: Monthly changes (evap + prec)
+#---------------------------------------------------------------
+cat("STEP 05a: Monthly changes...\n")
+cat("-------------------------------------------\n")
+source("05a_changes_monthly.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 5b: Spatial changes between periods
+#---------------------------------------------------------------
+cat("STEP 05b: Spatial changes...\n")
+cat("-------------------------------------------\n")
+source("05b_changes_spatial.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 5c: Change visualisation (timeseries + polar + spatial)
+#---------------------------------------------------------------
+cat("STEP 05c: Change plots...\n")
+cat("-------------------------------------------\n")
+source("05c_changes_plots.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 6a: Drivers preprocessing (merge with precipitation)
+#---------------------------------------------------------------
+cat("STEP 06a: Drivers preprocessing...\n")
+cat("-------------------------------------------\n")
+source("06a_drivers_preprocessing.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 6b: Driver scatter plots
+#---------------------------------------------------------------
+cat("STEP 06b: Driver plots...\n")
+cat("-------------------------------------------\n")
+source("06b_drivers_plot.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 6c: Onset / termination analysis
+#---------------------------------------------------------------
+cat("STEP 06c: Onset / termination analysis...\n")
+cat("-------------------------------------------\n")
+source("06c_drivers_onset_termination.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 7a: P-E implications (waffle plots)
+#---------------------------------------------------------------
+cat("STEP 07a: P-E implications...\n")
+cat("-------------------------------------------\n")
+source("07a_implications.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 7b: Monthly P-E implications
+#---------------------------------------------------------------
+cat("STEP 07b: Monthly P-E implications...\n")
+cat("-------------------------------------------\n")
+source("07b_implications_monthly.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 7c: Day of extremes within events
+#---------------------------------------------------------------
+cat("STEP 07c: Day of extremes...\n")
+cat("-------------------------------------------\n")
+source("07c_day_of_extremes.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# SUMMARY
+#---------------------------------------------------------------
 end_time <- Sys.time()
-elapsed <- difftime(end_time, start_time, units = "mins")
+elapsed  <- difftime(end_time, start_time, units = "mins")
 
-cat("\n===========================================\n")
-cat("           ANALYSIS COMPLETE!              \n")
-cat("===========================================\n\n")
-cat("Total time:", round(elapsed, 1), "minutes\n\n")
+cat("\n=====================================================\n")
+cat("               ANALYSIS COMPLETE!                    \n")
+cat("=====================================================\n\n")
+cat("Total time:", round(as.numeric(elapsed), 1), "minutes\n\n")
 
 cat("Output locations:\n")
-cat("  - Data: data/\n")
-cat("  - Figures: figures/\n")
-cat("  - Tables: tables/\n\n")
+cat("  Data    :", PATH_OUTPUT_DATA, "\n")
+cat("  Figures :", PATH_OUTPUT_FIGURES, "\n")
+cat("  Tables  :", PATH_OUTPUT_TABLES, "\n\n")
 
 cat("Key outputs:\n")
-cat("  - Main data: data/exeves_std_europe_med.rds\n")
-cat("  - Event stats: tables/europe_med_event_properties.csv\n")
-cat("  - All figures: figures/*.png\n\n")
+cat("  data/exeves_std_europe_med.rds       – main ExEvE dataset\n")
+cat("  data/europe_med_prec_grid.rds        – aligned precipitation grid\n")
+cat("  tables/definition_properties.csv     – event property table\n")
+cat("  tables/definition_change.csv         – period change table\n")
+cat("  figures/clustering.png               – ACF / temporal clustering\n")
+cat("  figures/exeve_changes.png            – severity/intensity changes\n")
+cat("  figures/drivers.png                  – evap vs prec scatter\n")
+cat("  figures/onset_termination.png        – event onset/termination\n")
+cat("  figures/implications.png             – P-E budget (all/ExEvE/non)\n")
+cat("  figures/implications_monthly.png     – monthly P-E budget\n")
+cat("  figures/wet_days.png                 – day-of-extreme analysis\n\n")
 
-cat("To explore results:\n")
-cat("  - View PNG files in figures/ folder\n")
-cat("  - Open CSV files in tables/ folder\n")
-cat("  - Load RDS files in R for further analysis:\n")
-cat("    exeves <- readRDS('data/exeves_std_europe_med.rds')\n\n")
+cat("To explore results interactively:\n")
+cat("  exeves <- readRDS('data/exeves_std_europe_med.rds')\n")
+cat("  prec   <- readRDS('data/europe_med_prec_grid.rds')\n")
