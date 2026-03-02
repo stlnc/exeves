@@ -48,9 +48,9 @@ cat("  Groups:", evap[, uniqueN(paste(pentad, grid_id))], "\n")
 # Use tryCatch with lighter fitted-value extraction
 evap[, c("pentad_median_qr", "pentad_std_q95_qr") := {
   fit_med <- tryCatch(rq(std_value ~ date, tau = 0.5)$fitted,
-                      error = function(e) rep(median(std_value), .N))
+                      error = function(e) rep(median(std_value, na.rm = TRUE), .N))
   fit_q95 <- tryCatch(rq(std_value ~ date, tau = EXTREMES_THRES)$fitted,
-                      error = function(e) rep(quantile(std_value, EXTREMES_THRES), .N))
+                      error = function(e) rep(quantile(std_value, EXTREMES_THRES, na.rm = TRUE), .N))
   list(fit_med, fit_q95)
 }, by = .(pentad, grid_id)]
 gc()
