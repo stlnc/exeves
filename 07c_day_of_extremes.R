@@ -18,12 +18,15 @@ cat("Loading data...\n")
 exeves <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 prec   <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 
-# Merge precipitation into ExEvE events only
-prec_sub <- copy(prec[, .(grid_id, date, value)])
-setnames(prec_sub, "value", "prec")
-exeves_prec <- merge(exeves[!is.na(event_80_95_id)], prec_sub, by = c('grid_id', 'date'), all.x = TRUE)
-setnames(exeves_prec, "value", "evap")
-rm(prec_sub); gc()
+# Add prec to full exeves via keyed update-join (keep for Panel C)
+setkey(exeves, grid_id, date)
+setkey(prec,   grid_id, date)
+exeves[prec, prec := i.value, on = .(grid_id, date)]
+setnames(exeves, "value", "evap")
+rm(prec); gc()
+
+# For Panels A&B: subset to ExEvE events only
+exeves_prec <- exeves[!is.na(event_80_95_id)]
 
 # Flag extreme evaporation days
 exeves_prec[!is.na(extreme_id), extreme_evap := TRUE]
@@ -114,13 +117,8 @@ gg_mean_day <- ggplot(to_plot_mean[event_duration == MODAL_DURATION]) +
 #===============================================================================
 cat("Panel C: Wet/Dry day ratio...\n")
 
-# Re-merge to include non-event days for comparison
-prec_all <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
-prec_all_sub <- copy(prec_all[, .(grid_id, date, value)])
-setnames(prec_all_sub, "value", "prec")
-exeves_all <- merge(exeves, prec_all_sub, by = c('grid_id', 'date'), all.x = TRUE)
-setnames(exeves_all, "value", "evap")
-rm(prec_all, prec_all_sub); gc()
+# Use the full exeves table (already has prec column from above)
+exeves_all <- exeves
 
 exeves_all[, prec_day := factor("wet")]
 exeves_all[prec < 1, prec_day := factor("dry")]

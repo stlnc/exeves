@@ -18,17 +18,15 @@ axis_decimal <- function(x) sprintf("%.1f", x)
 #===============================================================================
 cat("Loading data...\n")
 exeves <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
-evap   <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_evap_grid.rds'))
 max_lag  <- 7
 n_grids  <- exeves[, max(grid_id)]
 
-names(evap)[3] <- "evap"
-exeves[, value := NULL]
-exeves_all <- merge(evap, exeves, all.x = TRUE, by = c("grid_id", "date"))
+# exeves already contains the evap 'value' column – rename for plotting
+setnames(exeves, "value", "evap")
+exeves_all <- exeves  # no extra merge needed
 
 cat("Computing auto-correlation...\n")
-dummy <- exeves[, .(grid_id, std_value)]
-exeves_acf <- dummy[, sapply(.SD, function(x) acf(x, lag.max = max_lag, plot = FALSE)$acf), grid_id]
+exeves_acf <- exeves[, .(V1 = acf(std_value, lag.max = max_lag, plot = FALSE)$acf), grid_id]
 exeves_acf[, lag := rep(1:(1 + max_lag), n_grids)]
 acf_table <- dcast(exeves_acf, grid_id ~ lag, value.var = 'V1')
 acf_lag_means <- apply(acf_table, 2, mean)[-1]
@@ -137,4 +135,4 @@ ggsave(paste0(PATH_OUTPUT_FIGURES, "clustering.png"), width = 9, height = 12)
 cat("Temporal clustering analysis complete.\n")
 cat("Saved:", paste0(PATH_OUTPUT_FIGURES, "clustering.png"), "\n")
 
-rm(exeves, evap, exeves_all); gc()
+rm(exeves, exeves_all); gc()

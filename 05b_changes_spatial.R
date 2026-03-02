@@ -14,11 +14,15 @@ evap_grid <- readRDS(paste0(PATH_OUTPUT_DATA, 'grid_', region, '.rds'))
 exeves    <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 prec      <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 
-# Merge precipitation
-exeves <- merge(exeves, prec[, .(grid_id, date, prec = value)], by = c('grid_id', 'date'))
-# Add spatial coordinates
-exeves <- evap_grid[exeves, on = 'grid_id'][, grid_id := NULL]
-rm(evap_grid); gc()
+# Merge precipitation – keyed join (no full copy)
+setkey(exeves, grid_id, date)
+setkey(prec,   grid_id, date)
+exeves[prec, prec := i.value, on = .(grid_id, date)]
+
+# Add spatial coordinates via keyed update
+setkey(evap_grid, grid_id)
+exeves[evap_grid, `:=`(lon = i.lon, lat = i.lat), on = "grid_id"]
+rm(evap_grid, prec); gc()
 
 #===============================================================================
 # SEVERITY: All values

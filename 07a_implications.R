@@ -19,12 +19,13 @@ exeves    <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 prec      <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 evap_grid <- readRDS(paste0(PATH_OUTPUT_DATA, 'grid_', region, '.rds'))
 
-# Prepare merge
-prec_sub <- copy(prec[, .(grid_id, date, value)])
-setnames(prec_sub, "value", "prec")
-exeves_prec <- merge(exeves, prec_sub, by = c('grid_id', 'date'), all.x = TRUE)
-setnames(exeves_prec, "value", "evap")
-rm(prec_sub); gc()
+# Keyed update-join: add prec column in-place (no full copy)
+setkey(exeves, grid_id, date)
+setkey(prec,   grid_id, date)
+exeves[prec, prec := i.value, on = .(grid_id, date)]
+setnames(exeves, "value", "evap")
+exeves_prec <- exeves
+rm(prec); gc()
 
 #===============================================================================
 # Helper: compute P-E summaries and classify water cycle changes

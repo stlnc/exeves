@@ -13,9 +13,12 @@ cat("Loading data...\n")
 exeves <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 prec   <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 
-# Merge precipitation
-exeves_drivers <- merge(exeves, prec[, .(grid_id, date, prec = value)],
-                        by = c('grid_id', 'date'))
+# Merge precipitation – keyed update-join (avoids a full copy)
+setkey(exeves, grid_id, date)
+setkey(prec,   grid_id, date)
+exeves[prec, prec := i.value, on = .(grid_id, date)]
+exeves_drivers <- exeves
+rm(exeves, prec); gc()
 
 # Classify conditions
 exeves_drivers[, conditions := ordered('ExEvE')]
@@ -37,4 +40,4 @@ saveRDS(exeves_drivers, paste0(PATH_OUTPUT_DATA, region, '_exeves_drivers.rds'))
 
 cat("Drivers preprocessing complete.\n")
 cat("  Saved:", paste0(region, '_exeves_drivers.rds'), "\n")
-rm(exeves, prec, exeves_drivers); gc()
+rm(exeves_drivers); gc()

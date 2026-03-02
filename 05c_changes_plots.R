@@ -4,9 +4,6 @@
 library(data.table)
 library(ggplot2)
 library(ggpubr)
-library(dplyr)
-library(purrr)
-library(cowplot)
 
 # Load paths and constants
 load("paths.Rdata")
