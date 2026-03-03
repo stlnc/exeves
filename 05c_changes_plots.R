@@ -115,7 +115,7 @@ monthly_plot_sum <- ggplot() +
 # SPATIAL PLOT
 #===============================================================================
 cat("Creating spatial plot...\n")
-colnames(spatial_changes)[6] <- 'Ratio'
+setnames(spatial_changes, "ratio", "Ratio")
 
 lon_range <- evap_grid[, range(lon)]
 lat_range <- evap_grid[, range(lat)]

@@ -55,10 +55,12 @@ prec_max <- exeves_prec[prec_max_idx, .(date, grid_id, event_80_95_id, prec_max 
 exeves_prec <- merge(exeves_prec, prec_max, by = c('grid_id', 'event_80_95_id', 'date'), all.x = TRUE)
 exeves_prec[!is.na(prec_max), event_day_of_prec_max := event_day]
 
-exeves_prec[, event_day_of_first_extreme := min(event_day_of_extreme, na.rm = TRUE),
+exeves_prec[, event_day_of_first_extreme := suppressWarnings(min(event_day_of_extreme, na.rm = TRUE)),
             .(grid_id, event_80_95_id)]
-exeves_prec[, event_day_of_first_prec_max := min(event_day_of_prec_max, na.rm = TRUE),
+exeves_prec[, event_day_of_first_prec_max := suppressWarnings(min(event_day_of_prec_max, na.rm = TRUE)),
             .(grid_id, event_80_95_id)]
+exeves_prec[is.infinite(event_day_of_first_extreme), event_day_of_first_extreme := NA_real_]
+exeves_prec[is.infinite(event_day_of_first_prec_max), event_day_of_first_prec_max := NA_real_]
 
 # Select the most common event duration for visualisation
 dur_counts <- exeves_prec[, .(N = uniqueN(paste(grid_id, event_80_95_id))), by = event_duration]

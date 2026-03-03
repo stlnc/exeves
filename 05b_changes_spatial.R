@@ -30,11 +30,13 @@ rm(evap_grid, prec); gc()
 cat("Computing severity changes...\n")
 
 evap_severity_period <- exeves[, .(value = sum(value)), .(lon, lat, period)]
+evap_severity_period <- evap_severity_period[evap_severity_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 evap_severity_period[, diff_value := diff(value), by = .(lon, lat)]
 evap_severity_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 evap_severity_period$variable <- "E: All days"
 
 prec_severity_period <- exeves[, .(value = sum(prec, na.rm = TRUE)), .(lon, lat, period)]
+prec_severity_period <- prec_severity_period[prec_severity_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 prec_severity_period[, diff_value := diff(value), by = .(lon, lat)]
 prec_severity_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 prec_severity_period$variable <- "P: All days"
@@ -43,13 +45,13 @@ prec_severity_period$variable <- "P: All days"
 # SEVERITY: ExEvEs
 #===============================================================================
 event_evap_severity_period <- exeves[!is.na(event_id), .(value = sum(value)), .(lon, lat, period)]
-event_evap_severity_period <- event_evap_severity_period[event_evap_severity_period[, .N, by = .(lon, lat)][N == 2], on = .(lon, lat)]
+event_evap_severity_period <- event_evap_severity_period[event_evap_severity_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 event_evap_severity_period[, diff_value := diff(value), by = .(lon, lat)]
 event_evap_severity_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 event_evap_severity_period$variable <- "Evaporation (ExEvEs)"
 
 event_prec_severity_period <- exeves[!is.na(event_id), .(value = sum(prec, na.rm = TRUE)), .(lon, lat, period)]
-event_prec_severity_period <- event_prec_severity_period[event_prec_severity_period[, .N, by = .(lon, lat)][N == 2], on = .(lon, lat)]
+event_prec_severity_period <- event_prec_severity_period[event_prec_severity_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 event_prec_severity_period[, diff_value := diff(value), by = .(lon, lat)]
 event_prec_severity_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 event_prec_severity_period$variable <- "Precipitation (ExEvEs)"
@@ -59,13 +61,13 @@ event_prec_severity_period$variable <- "Precipitation (ExEvEs)"
 #===============================================================================
 cat("Computing intensity changes...\n")
 event_evap_intensity_period <- exeves[!is.na(event_id), .(value = round(mean(value), 2)), .(lon, lat, period)]
-event_evap_intensity_period <- event_evap_intensity_period[event_evap_intensity_period[, .N, by = .(lon, lat)][N == 2], on = .(lon, lat)]
+event_evap_intensity_period <- event_evap_intensity_period[event_evap_intensity_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 event_evap_intensity_period[, diff_value := diff(value), by = .(lon, lat)]
 event_evap_intensity_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 event_evap_intensity_period$variable <- "Intensity (E)"
 
 event_prec_intensity_period <- exeves[!is.na(event_id), .(value = round(mean(prec, na.rm = TRUE), 2)), .(lon, lat, period)]
-event_prec_intensity_period <- event_prec_intensity_period[event_prec_intensity_period[, .N, by = .(lon, lat)][N == 2], on = .(lon, lat)]
+event_prec_intensity_period <- event_prec_intensity_period[event_prec_intensity_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 event_prec_intensity_period[, diff_value := diff(value), by = .(lon, lat)]
 event_prec_intensity_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 event_prec_intensity_period$variable <- "Intensity (P)"
@@ -75,7 +77,7 @@ event_prec_intensity_period$variable <- "Intensity (P)"
 #===============================================================================
 cat("Computing frequency changes...\n")
 event_frequency_period <- exeves[!is.na(event_id), .(value = .N), .(lon, lat, period)]
-event_frequency_period <- event_frequency_period[event_frequency_period[, .N, by = .(lon, lat)][N == 2], on = .(lon, lat)]
+event_frequency_period <- event_frequency_period[event_frequency_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 event_frequency_period[, diff_value := diff(value), by = .(lon, lat)]
 event_frequency_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 event_frequency_period$variable <- factor("ExEvEs Frequency")
@@ -86,7 +88,7 @@ event_frequency_period$variable <- factor("ExEvEs Frequency")
 cat("Computing duration changes...\n")
 event_duration_period <- exeves[!is.na(event_id), .(value = .N), .(event_id, lon, lat, period)]
 event_duration_period <- event_duration_period[, .(value = mean(value)), .(lon, lat, period)]
-event_duration_period <- event_duration_period[event_duration_period[, .N, by = .(lon, lat)][N == 2], on = .(lon, lat)]
+event_duration_period <- event_duration_period[event_duration_period[, .N, by = .(lon, lat)][N == 2, .(lon, lat)], on = .(lon, lat), nomatch = NULL]
 event_duration_period[, diff_value := diff(value), by = .(lon, lat)]
 event_duration_period[, ratio := 1 + diff_value / value, by = .(lon, lat, period)]
 event_duration_period$variable <- factor("ExEvEs Duration")
