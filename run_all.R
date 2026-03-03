@@ -104,6 +104,22 @@ source("07c_day_of_extremes.R")
 cat("\n")
 
 #---------------------------------------------------------------
+# STEP 8a: Spatial maps (event frequency, duration, change)
+#---------------------------------------------------------------
+cat("STEP 8a: Spatial maps...\n")
+cat("-------------------------------------------\n")
+source("03_spatial_maps.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 8b: Temporal analysis (annual trends, seasonal patterns)
+#---------------------------------------------------------------
+cat("STEP 8b: Temporal analysis...\n")
+cat("-------------------------------------------\n")
+source("04_temporal_analysis.R")
+cat("\n")
+
+#---------------------------------------------------------------
 # SUMMARY
 #---------------------------------------------------------------
 end_time <- Sys.time()
@@ -128,7 +144,9 @@ cat("  figures/clustering.png               – ACF / temporal clustering\n")
 cat("  figures/exeve_changes.png            – severity/intensity changes\n")
 cat("  figures/implications.png             – P-E budget (all/ExEvE/non)\n")
 cat("  figures/implications_monthly.png     – monthly P-E budget\n")
-cat("  figures/wet_days.png                 – day-of-extreme analysis\n\n")
+cat("  figures/wet_days.png                 – day-of-extreme analysis\n")
+cat("  figures/map_event_*.png              – spatial maps (frequency, duration, change)\n")
+cat("  figures/timeseries_*.png             – temporal trends (annual, duration)\n\n")
 
 cat("To explore results interactively:\n")
 cat("  exeves <- readRDS('data/exeves_std_europe_med.rds')\n")

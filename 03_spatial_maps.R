@@ -118,7 +118,7 @@ p4 <- ggplot(spatial_change[!is.na(ratio) & events_period1 >= 5],
   ) +
   coord_quickmap() +
   labs(title = "Ratio of Event Frequency Change",
-       subtitle = "2002-2022 / 1981-2001 (cells with ≥5 events in first period)",
+       subtitle = "2002-2020 / 1981-2001 (cells with ≥5 events in first period)",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
   theme(

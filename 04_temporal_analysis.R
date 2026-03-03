@@ -5,9 +5,6 @@ library(data.table)
 library(ggplot2)
 library(lubridate)
 
-# Memory optimization settings
-setDTthreads(1)  # Reduce parallel threads to save memory
-
 # Load paths and data
 load("paths.Rdata")
 region <- 'europe_med'
@@ -93,7 +90,7 @@ seasonal_comparison_long <- melt(seasonal_comparison, id.vars = "season",
 p3 <- ggplot(seasonal_comparison_long, aes(x = season, y = events, fill = period)) +
   geom_col(position = "dodge", alpha = 0.8) +
   scale_fill_manual(values = c("up_to_2001" = "steelblue", "after_2001" = "darkorange2"),
-                    labels = c("1981-2001", "2002-2022")) +
+                    labels = c("1981-2001", "2002-2020")) +
   labs(title = "Seasonal Event Frequency by Period",
        subtitle = "Mean events per grid cell",
        x = "Season", y = "Events per cell", fill = "Period") +

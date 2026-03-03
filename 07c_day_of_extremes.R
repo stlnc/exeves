@@ -95,7 +95,7 @@ gg_extreme_day <- ggplot(to_plot[event_duration == MODAL_DURATION]) +
 #===============================================================================
 cat("Panel B: Mean fluxes by event day...\n")
 
-to_plot_mean <- exeves_prec[, .(Evaporation = mean(evap), Precipitation = mean(prec)),
+to_plot_mean <- exeves_prec[, .(Evaporation = mean(evap, na.rm = TRUE), Precipitation = mean(prec, na.rm = TRUE)),
                              .(event_duration, event_day, month = month(date))]
 to_plot_mean <- melt(to_plot_mean, id.vars = c("event_duration", "event_day", "month"))
 setnames(to_plot_mean, "variable", "Variable")
@@ -120,24 +120,23 @@ cat("Panel C: Wet/Dry day ratio...\n")
 # Use the full exeves table (already has prec column from above)
 exeves_all <- exeves
 
-exeves_all[, prec_day := factor("wet")]
-exeves_all[prec < 1, prec_day := factor("dry")]
+exeves_all[, prec_day := factor(fifelse(prec >= 1, "wet", "dry"), levels = c("wet", "dry"))]
 
 # All days
-all_prec_days <- exeves_all[, .N / (GRID_CELL_N * 0.5 * PERIOD_LENGTH),
+all_prec_days <- exeves_all[!is.na(prec), .N / (GRID_CELL_N * 0.5 * PERIOD_LENGTH),
                              .(period, prec_day, month(date))]
 setnames(all_prec_days, "V1", "value")
 all_prec_days$conditions <- "All days"
 
 # ExEvE days
-exeves_prec_days <- exeves_all[!is.na(event_80_95_id),
+exeves_prec_days <- exeves_all[!is.na(event_80_95_id) & !is.na(prec),
                                 .N / (GRID_CELL_N * 0.5 * PERIOD_LENGTH),
                                 .(period, prec_day, month(date))]
 setnames(exeves_prec_days, "V1", "value")
 exeves_prec_days$conditions <- "ExEvEs"
 
 # Non-ExEvE days
-non_exeves_prec_days <- exeves_all[is.na(event_80_95_id),
+non_exeves_prec_days <- exeves_all[is.na(event_80_95_id) & !is.na(prec),
                                     .N / (GRID_CELL_N * 0.5 * PERIOD_LENGTH),
                                     .(period, prec_day, month(date))]
 setnames(non_exeves_prec_days, "V1", "value")
