@@ -27,27 +27,31 @@ exeves_all <- exeves  # no extra merge needed
 
 cat("Computing auto-correlation...\n")
 
-# Defensive ACF computation that handles groups with too few observations
-get_acf_safe <- function(values, max_lag) {
-  clean_values <- values[!is.na(values)]
-  if (length(clean_values) <= max_lag + 1) {
-    return(rep(NA_real_, max_lag + 1))
-  }
-  tryCatch(as.vector(acf(clean_values, lag.max = max_lag, plot = FALSE)$acf),
+# Compute ACF per grid cell using a split-lapply approach (avoids data.table j= issues)
+grid_ids <- sort(unique(exeves$grid_id))
+n_grids  <- length(grid_ids)
+
+acf_list <- lapply(grid_ids, function(gid) {
+  vals <- exeves[grid_id == gid, std_value]
+  vals <- vals[is.finite(vals)]  # remove NA, NaN, Inf, -Inf
+  if (length(vals) <= max_lag + 1) return(rep(NA_real_, max_lag + 1))
+  tryCatch(as.vector(acf(vals, lag.max = max_lag, plot = FALSE)$acf),
            error = function(e) rep(NA_real_, max_lag + 1))
-}
+})
 
-exeves_acf <- exeves[, .(V1 = get_acf_safe(std_value, max_lag)), grid_id]
-exeves_acf[, lag := rep(0:max_lag, n_grids)]
-acf_table <- dcast(exeves_acf, grid_id ~ lag, value.var = 'V1')
+acf_mat <- do.call(rbind, acf_list)  # n_grids x (max_lag+1)
+colnames(acf_mat) <- paste0("lag", 0:max_lag)
 
-# Drop grid cells that returned all-NA ACF (too few observations)
-acf_table <- acf_table[complete.cases(acf_table)]
-acf_lag_means <- apply(acf_table[, -1], 2, mean, na.rm = TRUE)
+# Drop grid cells that returned all-NA
+good <- complete.cases(acf_mat)
+acf_mat <- acf_mat[good, , drop = FALSE]
+cat("  Grid cells with valid ACF:", sum(good), "of", n_grids, "\n")
+
+acf_lag_means <- colMeans(acf_mat, na.rm = TRUE)
 
 evap_acf <- data.table(lag = 0:max_lag, acf_lag_means,
-                        q05 = apply(acf_table[, -1], 2, quantile, 0.05, na.rm = TRUE),
-                        q95 = apply(acf_table[, -1], 2, quantile, 0.95, na.rm = TRUE))
+                        q05 = apply(acf_mat, 2, quantile, 0.05, na.rm = TRUE),
+                        q95 = apply(acf_mat, 2, quantile, 0.95, na.rm = TRUE))
 
 ## Theoretical AR(1) model ensemble
 cat("Simulating AR(1) ensemble...\n")
