@@ -40,11 +40,14 @@ get_acf_safe <- function(values, max_lag) {
 exeves_acf <- exeves[, .(V1 = get_acf_safe(std_value, max_lag)), grid_id]
 exeves_acf[, lag := rep(0:max_lag, n_grids)]
 acf_table <- dcast(exeves_acf, grid_id ~ lag, value.var = 'V1')
-acf_lag_means <- apply(acf_table, 2, mean)[-1]
+
+# Drop grid cells that returned all-NA ACF (too few observations)
+acf_table <- acf_table[complete.cases(acf_table)]
+acf_lag_means <- apply(acf_table[, -1], 2, mean, na.rm = TRUE)
 
 evap_acf <- data.table(lag = 0:max_lag, acf_lag_means,
-                        q05 = apply(acf_table, 2, quantile, 0.05)[-1],
-                        q95 = apply(acf_table, 2, quantile, 0.95)[-1])
+                        q05 = apply(acf_table[, -1], 2, quantile, 0.05, na.rm = TRUE),
+                        q95 = apply(acf_table[, -1], 2, quantile, 0.95, na.rm = TRUE))
 
 ## Theoretical AR(1) model ensemble
 cat("Simulating AR(1) ensemble...\n")
@@ -53,9 +56,9 @@ ar_model_ensemble <- replicate(1000,
   arima.sim(model = list(order = c(1, 0, 0), ar = acf_lag_means[2]), n = n_days))
 ensemble_acf <- apply(ar_model_ensemble, 2, acf, max_lag, plot = FALSE)
 ensemble_acf_lag_means <- sapply(ensemble_acf, '[[', 1)
-evap_acf[, ar_mean := rowMeans(ensemble_acf_lag_means)]
-evap_acf[, ar_q95  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.95))]
-evap_acf[, ar_q05  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.05))]
+evap_acf[, ar_mean := rowMeans(ensemble_acf_lag_means, na.rm = TRUE)]
+evap_acf[, ar_q95  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.95, na.rm = TRUE))]
+evap_acf[, ar_q05  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.05, na.rm = TRUE))]
 
 #===============================================================================
 # 2. PLOTS
