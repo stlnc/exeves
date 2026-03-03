@@ -75,8 +75,11 @@ evap[, ext_q95       := std_value > pentad_std_q95]
 evap[, above_mean_id := rleid(val_above_mean), by = grid_id]
 evap[, extreme_id    := rleid(ext_q95),         by = grid_id]
 # Mark events: any run of above-mean that contains at least one extreme day
-mean_ids_with_ext <- evap[ext_q95 == TRUE, unique(above_mean_id)]
-evap[, evap_event_mean := above_mean_id %in% mean_ids_with_ext & val_above_mean == TRUE]
+# (grid-aware: rleid restarts per grid_id, so %in% must be scoped per grid)
+has_ext_mean <- unique(evap[ext_q95 == TRUE, .(grid_id, above_mean_id)])
+evap[, evap_event_mean := FALSE]
+evap[has_ext_mean, on = .(grid_id, above_mean_id), evap_event_mean := (val_above_mean)]
+rm(has_ext_mean)
 evap[, event_id := rleid(evap_event_mean), by = grid_id]
 evap[evap_event_mean == FALSE, event_id := NA]
 evap[ext_q95 == FALSE, extreme_id := NA]
@@ -86,8 +89,10 @@ evap[, val_above_medqr := std_value > pentad_median_qr]
 evap[, ext_q95_qr      := std_value > pentad_std_q95_qr]
 evap[, above_medqr_id  := rleid(val_above_medqr), by = grid_id]
 evap[, extreme_qr_id   := rleid(ext_q95_qr),      by = grid_id]
-medqr_ids_with_ext <- evap[ext_q95_qr == TRUE, unique(above_medqr_id)]
-evap[, evap_event_qr := above_medqr_id %in% medqr_ids_with_ext & val_above_medqr == TRUE]
+has_ext_medqr <- unique(evap[ext_q95_qr == TRUE, .(grid_id, above_medqr_id)])
+evap[, evap_event_qr := FALSE]
+evap[has_ext_medqr, on = .(grid_id, above_medqr_id), evap_event_qr := (val_above_medqr)]
+rm(has_ext_medqr)
 evap[, event_qr_id := rleid(evap_event_qr), by = grid_id]
 evap[evap_event_qr == FALSE, event_qr_id := NA]
 evap[ext_q95_qr == FALSE, extreme_qr_id := NA]
@@ -95,8 +100,10 @@ evap[ext_q95_qr == FALSE, extreme_qr_id := NA]
 # --- Definition 3: Q80 / Q95 ---
 evap[, val_above_q80 := std_value > pentad_std_q80]
 evap[, above_q80_id  := rleid(val_above_q80), by = grid_id]
-q80_ids_with_ext <- evap[ext_q95 == TRUE, unique(above_q80_id)]
-evap[, evap_event_80_95 := above_q80_id %in% q80_ids_with_ext & val_above_q80 == TRUE]
+has_ext_q80 <- unique(evap[ext_q95 == TRUE, .(grid_id, above_q80_id)])
+evap[, evap_event_80_95 := FALSE]
+evap[has_ext_q80, on = .(grid_id, above_q80_id), evap_event_80_95 := (val_above_q80)]
+rm(has_ext_q80)
 evap[, event_80_95_id := rleid(evap_event_80_95), by = grid_id]
 evap[evap_event_80_95 == FALSE, event_80_95_id := NA]
 

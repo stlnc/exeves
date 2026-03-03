@@ -55,7 +55,7 @@ p1 <- ggplot(spatial_data, aes(x = lon, y = lat, fill = event_frequency)) +
   geom_tile() +
   scale_fill_viridis_c(option = "plasma", name = "Events") +
   coord_quickmap() +
-  labs(title = "Extreme Event Frequency (1981-2022)",
+  labs(title = "Extreme Event Frequency (1981-2020)",
        subtitle = "Q80/Q95 definition",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
@@ -95,7 +95,7 @@ p3 <- ggplot(spatial_change, aes(x = lon, y = lat, fill = change)) +
   ) +
   coord_quickmap() +
   labs(title = "Change in Event Frequency",
-       subtitle = "Difference: 2002-2022 minus 1981-2001",
+       subtitle = "Difference: 2002-2020 minus 1981-2001",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
   theme(

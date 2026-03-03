@@ -45,13 +45,13 @@ exeves_prec[is.na(extreme_id), extremes_per_event := NA]
 exeves_prec[extreme_day == 1, event_day_of_extreme := event_day]
 
 # Cumulative sums
-exeves_prec[, cumsum_evap := cumsum(evap), .(grid_id, event_80_95_id)]
-exeves_prec[, cumsum_prec := cumsum(prec), .(grid_id, event_80_95_id)]
+exeves_prec[, cumsum_evap := cumsum(fifelse(is.na(evap), 0, evap)), .(grid_id, event_80_95_id)]
+exeves_prec[, cumsum_prec := cumsum(fifelse(is.na(prec), 0, prec)), .(grid_id, event_80_95_id)]
 exeves_prec[, cumsum_diff := cumsum_prec - cumsum_evap, .(grid_id, event_80_95_id)]
 
 # Day of precipitation maximum within each event
-prec_max <- exeves_prec[exeves_prec[, prec == max(prec), .(event_80_95_id, grid_id)]$V1]
-prec_max <- prec_max[, .(date, grid_id, event_80_95_id, prec_max = prec)]
+prec_max_idx <- exeves_prec[, .I[which.max(prec)], .(event_80_95_id, grid_id)]$V1
+prec_max <- exeves_prec[prec_max_idx, .(date, grid_id, event_80_95_id, prec_max = prec)]
 exeves_prec <- merge(exeves_prec, prec_max, by = c('grid_id', 'event_80_95_id', 'date'), all.x = TRUE)
 exeves_prec[!is.na(prec_max), event_day_of_prec_max := event_day]
 

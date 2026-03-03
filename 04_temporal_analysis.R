@@ -56,7 +56,7 @@ p1 <- ggplot(annual_stats, aes(x = year, y = events_per_cell)) +
   geom_smooth(method = "lm", se = TRUE, color = "darkred", linetype = "dashed") +
   geom_vline(xintercept = 2001.5, linetype = "dotted", color = "gray40") +
   labs(title = "Annual Extreme Event Frequency",
-       subtitle = "Mean events per grid cell (Q80/Q95 definition)",
+       subtitle = "Mean events per grid cell, Q80/Q95 (1981-2020)",
        x = "Year", y = "Events per cell") +
   theme_minimal() +
   theme(
@@ -72,7 +72,7 @@ rm(p1); gc()
 p2 <- ggplot(monthly_stats, aes(x = month, y = events_per_cell)) +
   geom_col(fill = "steelblue", alpha = 0.8) +
   labs(title = "Monthly Distribution of Extreme Events",
-       subtitle = "Mean events per grid cell by month (1981-2022)",
+       subtitle = "Mean events per grid cell by month (1981-2020)",
        x = "Month", y = "Events per cell") +
   theme_minimal() +
   theme(
