@@ -72,8 +72,8 @@ dummy <- dummy[conditions == "ExEvE" & variable %in% c("evap"),
                .(grid_id, month, variable, ratio_total, ratio_exeves)]
 
 to_plot_1 <- dummy[, .(median = median(ratio_total, na.rm = TRUE),
-                        q95 = quantile(ratio_total, 0.99),
-                        q05 = quantile(ratio_total, 0.01),
+                        q95 = quantile(ratio_total, 0.99, na.rm = TRUE),
+                        q05 = quantile(ratio_total, 0.01, na.rm = TRUE),
                         Conditions = factor('All days')), .(month, variable)]
 to_plot_2 <- dummy[, .(median = median(ratio_exeves, na.rm = TRUE),
                         q95 = quantile(ratio_exeves, 0.99, na.rm = TRUE),
