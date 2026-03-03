@@ -33,7 +33,7 @@ get_acf_safe <- function(values, max_lag) {
   if (length(clean_values) <= max_lag + 1) {
     return(rep(NA_real_, max_lag + 1))
   }
-  tryCatch(acf(clean_values, lag.max = max_lag, plot = FALSE)$acf,
+  tryCatch(as.vector(acf(clean_values, lag.max = max_lag, plot = FALSE)$acf),
            error = function(e) rep(NA_real_, max_lag + 1))
 }
 
