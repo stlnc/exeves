@@ -26,8 +26,19 @@ setnames(exeves, "value", "evap")
 exeves_all <- exeves  # no extra merge needed
 
 cat("Computing auto-correlation...\n")
-exeves_acf <- exeves[, .(V1 = acf(std_value[!is.na(std_value)], lag.max = max_lag, plot = FALSE)$acf), grid_id]
-exeves_acf[, lag := rep(1:(1 + max_lag), n_grids)]
+
+# Defensive ACF computation that handles groups with too few observations
+get_acf_safe <- function(values, max_lag) {
+  clean_values <- values[!is.na(values)]
+  if (length(clean_values) <= max_lag + 1) {
+    return(rep(NA_real_, max_lag + 1))
+  }
+  tryCatch(acf(clean_values, lag.max = max_lag, plot = FALSE)$acf,
+           error = function(e) rep(NA_real_, max_lag + 1))
+}
+
+exeves_acf <- exeves[, .(V1 = get_acf_safe(std_value, max_lag)), grid_id]
+exeves_acf[, lag := rep(0:max_lag, n_grids)]
 acf_table <- dcast(exeves_acf, grid_id ~ lag, value.var = 'V1')
 acf_lag_means <- apply(acf_table, 2, mean)[-1]
 
