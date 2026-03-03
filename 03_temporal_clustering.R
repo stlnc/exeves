@@ -26,7 +26,7 @@ setnames(exeves, "value", "evap")
 exeves_all <- exeves  # no extra merge needed
 
 cat("Computing auto-correlation...\n")
-exeves_acf <- exeves[, .(V1 = acf(std_value, lag.max = max_lag, plot = FALSE)$acf), grid_id]
+exeves_acf <- exeves[, .(V1 = acf(std_value[!is.na(std_value)], lag.max = max_lag, plot = FALSE)$acf), grid_id]
 exeves_acf[, lag := rep(1:(1 + max_lag), n_grids)]
 acf_table <- dcast(exeves_acf, grid_id ~ lag, value.var = 'V1')
 acf_lag_means <- apply(acf_table, 2, mean)[-1]
