@@ -163,8 +163,10 @@ event_comparison_2 <- period_stats('after_2001')
 # Numeric columns only for ratio
 num_cols <- names(event_comparison_1)[sapply(event_comparison_1, is.numeric)]
 event_comparison_change <- copy(event_comparison_2)
-event_comparison_change[, (num_cols) := lapply(.SD, function(x) round(x / event_comparison_1[[cur_column()]], 2)),
-                        .SDcols = num_cols]
+for (col_name in num_cols) {
+  set(event_comparison_change, j = col_name,
+      value = round(event_comparison_2[[col_name]] / event_comparison_1[[col_name]], 2))
+}
 
 write.csv(event_comparison_change, paste0(PATH_OUTPUT_TABLES, region, '_definition_change.csv'),
           row.names = FALSE)

@@ -18,24 +18,40 @@ axis_decimal <- function(x) sprintf("%.1f", x)
 #===============================================================================
 cat("Loading data...\n")
 exeves <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
-evap   <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_evap_grid.rds'))
 max_lag  <- 7
 n_grids  <- exeves[, max(grid_id)]
 
-names(evap)[3] <- "evap"
-exeves[, value := NULL]
-exeves_all <- merge(evap, exeves, all.x = TRUE, by = c("grid_id", "date"))
+# exeves already contains the evap 'value' column – rename for plotting
+setnames(exeves, "value", "evap")
+exeves_all <- exeves  # no extra merge needed
 
 cat("Computing auto-correlation...\n")
-dummy <- exeves[, .(grid_id, std_value)]
-exeves_acf <- dummy[, sapply(.SD, function(x) acf(x, lag.max = max_lag, plot = FALSE)$acf), grid_id]
-exeves_acf[, lag := rep(1:(1 + max_lag), n_grids)]
-acf_table <- dcast(exeves_acf, grid_id ~ lag, value.var = 'V1')
-acf_lag_means <- apply(acf_table, 2, mean)[-1]
+
+# Compute ACF per grid cell using a split-lapply approach (avoids data.table j= issues)
+grid_ids <- sort(unique(exeves$grid_id))
+n_grids  <- length(grid_ids)
+
+acf_list <- lapply(grid_ids, function(gid) {
+  vals <- exeves[grid_id == gid, std_value]
+  vals <- vals[is.finite(vals)]  # remove NA, NaN, Inf, -Inf
+  if (length(vals) <= max_lag + 1) return(rep(NA_real_, max_lag + 1))
+  tryCatch(as.vector(acf(vals, lag.max = max_lag, plot = FALSE)$acf),
+           error = function(e) rep(NA_real_, max_lag + 1))
+})
+
+acf_mat <- do.call(rbind, acf_list)  # n_grids x (max_lag+1)
+colnames(acf_mat) <- paste0("lag", 0:max_lag)
+
+# Drop grid cells that returned all-NA
+good <- complete.cases(acf_mat)
+acf_mat <- acf_mat[good, , drop = FALSE]
+cat("  Grid cells with valid ACF:", sum(good), "of", n_grids, "\n")
+
+acf_lag_means <- colMeans(acf_mat, na.rm = TRUE)
 
 evap_acf <- data.table(lag = 0:max_lag, acf_lag_means,
-                        q05 = apply(acf_table, 2, quantile, 0.05)[-1],
-                        q95 = apply(acf_table, 2, quantile, 0.95)[-1])
+                        q05 = apply(acf_mat, 2, quantile, 0.05, na.rm = TRUE),
+                        q95 = apply(acf_mat, 2, quantile, 0.95, na.rm = TRUE))
 
 ## Theoretical AR(1) model ensemble
 cat("Simulating AR(1) ensemble...\n")
@@ -44,9 +60,9 @@ ar_model_ensemble <- replicate(1000,
   arima.sim(model = list(order = c(1, 0, 0), ar = acf_lag_means[2]), n = n_days))
 ensemble_acf <- apply(ar_model_ensemble, 2, acf, max_lag, plot = FALSE)
 ensemble_acf_lag_means <- sapply(ensemble_acf, '[[', 1)
-evap_acf[, ar_mean := rowMeans(ensemble_acf_lag_means)]
-evap_acf[, ar_q95  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.95))]
-evap_acf[, ar_q05  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.05))]
+evap_acf[, ar_mean := rowMeans(ensemble_acf_lag_means, na.rm = TRUE)]
+evap_acf[, ar_q95  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.95, na.rm = TRUE))]
+evap_acf[, ar_q05  := apply(ensemble_acf_lag_means, 1, function(x) quantile(x, 0.05, na.rm = TRUE))]
 
 #===============================================================================
 # 2. PLOTS
@@ -137,4 +153,4 @@ ggsave(paste0(PATH_OUTPUT_FIGURES, "clustering.png"), width = 9, height = 12)
 cat("Temporal clustering analysis complete.\n")
 cat("Saved:", paste0(PATH_OUTPUT_FIGURES, "clustering.png"), "\n")
 
-rm(exeves, evap, exeves_all); gc()
+rm(exeves, exeves_all); gc()

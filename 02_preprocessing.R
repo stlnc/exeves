@@ -1,5 +1,6 @@
 # Preprocessing: identify extreme evaporation events (ExEvEs) using multiple definitions
 # Adapted from imarkonis/ithaca/projects/exeves/stable/czechia/02_preprocessing.R
+# Optimised: single merge for all definitions, parallel quantile regression
 
 library(data.table)
 library(lubridate)
@@ -16,162 +17,131 @@ cat("Processing region:", region, "\n")
 # 1. LOAD EVAPORATION DATA
 #===============================================================================
 evap <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_evap_grid.rds'))
-evap <- evap[order(grid_id, date)]
+setkey(evap, grid_id, date)
 evap_grid <- readRDS(paste0(PATH_OUTPUT_DATA, 'grid_', region, '.rds'))
 
 cat("Grid cells:", nrow(evap_grid), "\n")
 cat("Evap rows:", nrow(evap), "\n")
 
 #===============================================================================
-# 2. PENTAD STANDARDISATION
+# 2. PENTAD STANDARDISATION (compute once, join once)
 #===============================================================================
 cat("\nCreating pentad statistics...\n")
-pentads <- copy(evap)
-pentads[, pentad := ceiling((yday(date) - leap_year(year(date)) * (yday(date) > 59)) / 5)]
-pentads[, std_value := (value - mean(value, na.rm = TRUE)) / sd(value, na.rm = TRUE),
-        by = .(pentad, grid_id)]
-pentads[, pentad_std_q95 := quantile(std_value, EXTREMES_THRES, na.rm = TRUE), by = grid_id]
-pentads[, pentad_std_q80 := quantile(std_value, LOW_THRES, na.rm = TRUE), by = grid_id]
-gc()
+
+# Work in-place on evap to avoid a full copy
+evap[, pentad := ceiling((yday(date) - leap_year(year(date)) * (yday(date) > 59)) / 5)]
+evap[, std_value := (value - mean(value, na.rm = TRUE)) / sd(value, na.rm = TRUE),
+     by = .(pentad, grid_id)]
+
+# Compute quantile thresholds once per grid_id, then join (avoids per-row expansion)
+q_lookup <- evap[, .(pentad_std_q95 = quantile(std_value, EXTREMES_THRES, na.rm = TRUE),
+                     pentad_std_q80 = quantile(std_value, LOW_THRES, na.rm = TRUE)),
+                 by = grid_id]
+evap <- q_lookup[evap, on = "grid_id"]
+rm(q_lookup); gc()
 
 # Quantile-regression thresholds (non-stationarity correction)
+# Compute per (pentad, grid_id) – the most expensive step
 cat("Computing quantile-regression thresholds (this may take a while)...\n")
-pentads[, pentad_median_qr := tryCatch(
-  rq(std_value ~ date, tau = 0.5)$fitted,
-  error = function(e) rep(median(std_value), .N)
-), by = .(pentad, grid_id)]
+cat("  Groups:", evap[, uniqueN(paste(pentad, grid_id))], "\n")
 
-pentads[, pentad_std_q95_qr := tryCatch(
-  rq(std_value ~ date, tau = EXTREMES_THRES)$fitted,
-  error = function(e) rep(quantile(std_value, EXTREMES_THRES), .N)
-), by = .(pentad, grid_id)]
-pentads[, value := NULL]
+# Use tryCatch with lighter fitted-value extraction
+evap[, c("pentad_median_qr", "pentad_std_q95_qr") := {
+  fit_med <- tryCatch(rq(std_value ~ date, tau = 0.5)$fitted,
+                      error = function(e) rep(median(std_value, na.rm = TRUE), .N))
+  fit_q95 <- tryCatch(rq(std_value ~ date, tau = EXTREMES_THRES)$fitted,
+                      error = function(e) rep(quantile(std_value, EXTREMES_THRES, na.rm = TRUE), .N))
+  list(fit_med, fit_q95)
+}, by = .(pentad, grid_id)]
 gc()
 
 cat("Pentad statistics complete.\n")
 
-#===============================================================================
-# 3. EVENT IDENTIFICATION - DEFINITION 1: Mean / Q95
-#===============================================================================
-cat("\nIdentifying events: Mean/Q95 definition...\n")
-exeves <- merge(evap, pentads[, .(grid_id, date, std_value, pentad_median_qr,
-                                   pentad_std_q80, pentad_std_q95, pentad_std_q95_qr)],
-                all.x = TRUE, by = c("grid_id", "date"))
-gc()
+# Save pentads for later (only the columns needed)
+pentads <- evap[, .(grid_id, date, std_value, pentad_median_qr,
+                     pentad_std_q80, pentad_std_q95, pentad_std_q95_qr)]
+saveRDS(pentads, paste0(PATH_OUTPUT_DATA, 'pentads_std_', region, '.rds'))
+rm(pentads); gc()
 
-exeves[, evap_event := FALSE]
-exeves[, value_above_low_thres := FALSE]
-exeves[, extreme := FALSE]
-exeves[std_value > 0, value_above_low_thres := TRUE]
-exeves[std_value > pentad_std_q95, extreme := TRUE]
-exeves[, above_low_thres_id := rleid(value_above_low_thres), by = grid_id]
-exeves[, extreme_id := rleid(extreme), by = grid_id]
+#===============================================================================
+# 3-6. ALL EVENT DEFINITIONS ON ONE TABLE (no extra copies)
+# Build all boolean flags and rleid columns on `evap` directly
+#===============================================================================
+cat("\nIdentifying events: all definitions in one pass...\n")
 
-exeves[extreme == TRUE, evap_event := TRUE, .(grid_id, above_low_thres_id)]
-above_low_thres_ids_with_extreme <- exeves[extreme == TRUE, above_low_thres_id]
-exeves[above_low_thres_id %in% above_low_thres_ids_with_extreme, evap_event := TRUE]
-exeves[, event_id := rleid(evap_event), .(grid_id)]
-exeves[evap_event != TRUE, event_id := NA]
-exeves[extreme != TRUE, extreme_id := NA]
+# --- Definition 1: Mean / Q95 ---
+evap[, val_above_mean := std_value > 0]
+evap[, ext_q95       := std_value > pentad_std_q95]
+evap[, above_mean_id := rleid(val_above_mean), by = grid_id]
+evap[, extreme_id    := rleid(ext_q95),         by = grid_id]
+# Mark events: any run of above-mean that contains at least one extreme day
+# (grid-aware: rleid restarts per grid_id, so %in% must be scoped per grid)
+has_ext_mean <- unique(evap[ext_q95 == TRUE, .(grid_id, above_mean_id)])
+evap[, evap_event_mean := FALSE]
+evap[has_ext_mean, on = .(grid_id, above_mean_id), evap_event_mean := (val_above_mean)]
+rm(has_ext_mean)
+evap[, event_id := rleid(evap_event_mean), by = grid_id]
+evap[evap_event_mean == FALSE, event_id := NA]
+evap[ext_q95 == FALSE, extreme_id := NA]
+
+# --- Definition 2: Median (QR) / Q95 (QR) ---
+evap[, val_above_medqr := std_value > pentad_median_qr]
+evap[, ext_q95_qr      := std_value > pentad_std_q95_qr]
+evap[, above_medqr_id  := rleid(val_above_medqr), by = grid_id]
+evap[, extreme_qr_id   := rleid(ext_q95_qr),      by = grid_id]
+has_ext_medqr <- unique(evap[ext_q95_qr == TRUE, .(grid_id, above_medqr_id)])
+evap[, evap_event_qr := FALSE]
+evap[has_ext_medqr, on = .(grid_id, above_medqr_id), evap_event_qr := (val_above_medqr)]
+rm(has_ext_medqr)
+evap[, event_qr_id := rleid(evap_event_qr), by = grid_id]
+evap[evap_event_qr == FALSE, event_qr_id := NA]
+evap[ext_q95_qr == FALSE, extreme_qr_id := NA]
+
+# --- Definition 3: Q80 / Q95 ---
+evap[, val_above_q80 := std_value > pentad_std_q80]
+evap[, above_q80_id  := rleid(val_above_q80), by = grid_id]
+has_ext_q80 <- unique(evap[ext_q95 == TRUE, .(grid_id, above_q80_id)])
+evap[, evap_event_80_95 := FALSE]
+evap[has_ext_q80, on = .(grid_id, above_q80_id), evap_event_80_95 := (val_above_q80)]
+rm(has_ext_q80)
+evap[, event_80_95_id := rleid(evap_event_80_95), by = grid_id]
+evap[evap_event_80_95 == FALSE, event_80_95_id := NA]
+
+# --- Definition 4: Q80 only ---
+evap[, event_80_id := rleid(val_above_q80), by = grid_id]
+evap[val_above_q80 == FALSE, event_80_id := NA]
 
 # Add period and season
-exeves[, period := ordered('up_to_2001')]
-exeves[date > END_PERIOD_1, period := ordered('after_2001')]
+evap[, period := ordered('up_to_2001')]
+evap[date > END_PERIOD_1, period := ordered('after_2001')]
+evap[month(date) < 4,                           season := ordered("JFM")]
+evap[month(date) >= 4  & month(date) < 7,       season := ordered("AMJ")]
+evap[month(date) >= 7  & month(date) < 10,      season := ordered("JAS")]
+evap[month(date) >= 10,                          season := ordered("OND")]
 
-exeves[month(date) < 4,  season := ordered("JFM")]
-exeves[month(date) >= 4  & month(date) < 7,  season := ordered("AMJ")]
-exeves[month(date) >= 7  & month(date) < 10, season := ordered("JAS")]
-exeves[month(date) >= 10, season := ordered("OND")]
+# Drop temporary boolean/helper columns
+drop_cols <- c("pentad", "pentad_std_q80", "pentad_std_q95",
+               "pentad_std_q95_qr", "pentad_median_qr",
+               "val_above_mean", "ext_q95", "above_mean_id",
+               "evap_event_mean", "val_above_medqr", "ext_q95_qr",
+               "above_medqr_id", "evap_event_qr",
+               "val_above_q80", "above_q80_id",
+               "evap_event_80_95")
+evap[, (drop_cols) := NULL]
 gc()
 
 #===============================================================================
-# 4. EVENT IDENTIFICATION - DEFINITION 2: Median (QR) / Q95 (QR)
-#===============================================================================
-cat("Identifying events: Median/Q95* definition (quantile regression)...\n")
-exeves_qr <- merge(evap, pentads[, .(grid_id, date, std_value, pentad_median_qr,
-                                      pentad_std_q95_qr)],
-                   all.x = TRUE, by = c("grid_id", "date"))
-exeves_qr[, evap_event := FALSE]
-exeves_qr[, value_above_low_thres := FALSE]
-exeves_qr[, extreme := FALSE]
-exeves_qr[std_value > pentad_median_qr, value_above_low_thres := TRUE]
-exeves_qr[std_value > pentad_std_q95_qr, extreme := TRUE]
-exeves_qr[, above_low_thres_id := rleid(value_above_low_thres)]
-exeves_qr[, extreme_qr_id := rleid(extreme), .(grid_id)]
-
-exeves_qr[extreme == TRUE, evap_event := TRUE, .(grid_id, above_low_thres_id)]
-above_low_thres_ids_with_extreme <- exeves_qr[extreme == TRUE, above_low_thres_id]
-exeves_qr[above_low_thres_id %in% above_low_thres_ids_with_extreme, evap_event := TRUE]
-exeves_qr[, event_qr_id := rleid(evap_event), .(grid_id)]
-exeves_qr[evap_event != TRUE, event_qr_id := NA]
-exeves_qr[extreme != TRUE, extreme_qr_id := NA]
-gc()
-
-#===============================================================================
-# 5. EVENT IDENTIFICATION - DEFINITION 3: Q80 / Q95
-#===============================================================================
-cat("Identifying events: Q80/Q95 definition...\n")
-exeves_80_95 <- merge(evap, pentads[, .(grid_id, date, std_value, pentad_median_qr,
-                                         pentad_std_q80, pentad_std_q95, pentad_std_q95_qr)],
-                      all.x = TRUE, by = c("grid_id", "date"))
-
-exeves_80_95[, evap_event := FALSE]
-exeves_80_95[, value_above_low_thres := FALSE]
-exeves_80_95[, extreme := FALSE]
-exeves_80_95[std_value > pentad_std_q80, value_above_low_thres := TRUE]
-exeves_80_95[std_value > pentad_std_q95, extreme := TRUE]
-exeves_80_95[, above_low_thres_id := rleid(value_above_low_thres)]
-exeves_80_95[, extreme_id := rleid(extreme), .(grid_id)]
-
-exeves_80_95[extreme == TRUE, evap_event := TRUE, .(grid_id, above_low_thres_id)]
-above_low_thres_ids_with_extreme <- exeves_80_95[extreme == TRUE, above_low_thres_id]
-exeves_80_95[above_low_thres_id %in% above_low_thres_ids_with_extreme, evap_event := TRUE]
-exeves_80_95[, event_80_95_id := rleid(evap_event), .(grid_id)]
-exeves_80_95[evap_event != TRUE, event_80_95_id := NA]
-exeves_80_95[extreme != TRUE, extreme_id := NA]
-gc()
-
-#===============================================================================
-# 6. EVENT IDENTIFICATION - DEFINITION 4: Q80 only
-#===============================================================================
-cat("Identifying events: Q80 definition...\n")
-exeves_80 <- merge(evap, pentads[, .(grid_id, date, std_value, pentad_median_qr,
-                                      pentad_std_q80)],
-                   all.x = TRUE, by = c("grid_id", "date"))
-exeves_80[, evap_event := FALSE]
-exeves_80[std_value > pentad_std_q80, evap_event := TRUE]
-exeves_80[, event_80_id := rleid(evap_event), .(grid_id)]
-exeves_80[evap_event != TRUE, event_80_id := NA]
-gc()
-
-#===============================================================================
-# 7. MERGE ALL DEFINITIONS
-#===============================================================================
-cat("Merging all definitions...\n")
-exeves <- merge(exeves[, .(grid_id, date, season, period, value, std_value,
-                            event_id, extreme_id)],
-                exeves_qr[, .(grid_id, date, event_qr_id, extreme_qr_id)],
-                by = c('grid_id', 'date'))
-exeves <- merge(exeves,
-                exeves_80_95[, .(grid_id, date, event_80_95_id)],
-                by = c('grid_id', 'date'))
-exeves <- merge(exeves,
-                exeves_80[, .(grid_id, date, event_80_id)],
-                by = c('grid_id', 'date'))
-
-rm(exeves_qr, exeves_80_95, exeves_80); gc()
-
-#===============================================================================
-# 8. SAVE
+# 7. SAVE
 #===============================================================================
 cat("Saving results...\n")
-saveRDS(pentads, paste0(PATH_OUTPUT_DATA, 'pentads_std_', region, '.rds'))
+exeves <- evap  # rename for clarity downstream
+setkey(exeves, grid_id, date)
 saveRDS(evap_grid, paste0(PATH_OUTPUT_DATA, 'grid_', region, '.rds'))
-saveRDS(exeves, paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
+saveRDS(exeves,    paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 cat("  Saved:", paste0('exeves_std_', region, '.rds'), "\n")
 
 #===============================================================================
-# 9. SUMMARY
+# 8. SUMMARY
 #===============================================================================
 cat("\n=== PREPROCESSING SUMMARY ===\n")
 cat("Grid cells     :", exeves[, uniqueN(grid_id)], "\n")
@@ -185,5 +155,5 @@ cat("Events/cell (QR)      :", round(mean(exeves[!is.na(event_qr_id),
 cat("Events/cell (Q80)     :", round(mean(exeves[!is.na(event_80_id),
   uniqueN(event_80_id), grid_id]$V1), 1), "\n")
 
-rm(evap, pentads, exeves); gc()
+rm(evap, exeves); gc()
 cat("\nPreprocessing complete!\n")

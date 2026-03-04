@@ -80,30 +80,6 @@ source("05c_changes_plots.R")
 cat("\n")
 
 #---------------------------------------------------------------
-# STEP 6a: Drivers preprocessing (merge with precipitation)
-#---------------------------------------------------------------
-cat("STEP 06a: Drivers preprocessing...\n")
-cat("-------------------------------------------\n")
-source("06a_drivers_preprocessing.R")
-cat("\n")
-
-#---------------------------------------------------------------
-# STEP 6b: Driver scatter plots
-#---------------------------------------------------------------
-cat("STEP 06b: Driver plots...\n")
-cat("-------------------------------------------\n")
-source("06b_drivers_plot.R")
-cat("\n")
-
-#---------------------------------------------------------------
-# STEP 6c: Onset / termination analysis
-#---------------------------------------------------------------
-cat("STEP 06c: Onset / termination analysis...\n")
-cat("-------------------------------------------\n")
-source("06c_drivers_onset_termination.R")
-cat("\n")
-
-#---------------------------------------------------------------
 # STEP 7a: P-E implications (waffle plots)
 #---------------------------------------------------------------
 cat("STEP 07a: P-E implications...\n")
@@ -125,6 +101,22 @@ cat("\n")
 cat("STEP 07c: Day of extremes...\n")
 cat("-------------------------------------------\n")
 source("07c_day_of_extremes.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 8a: Spatial maps (event frequency, duration, change)
+#---------------------------------------------------------------
+cat("STEP 8a: Spatial maps...\n")
+cat("-------------------------------------------\n")
+source("03_spatial_maps.R")
+cat("\n")
+
+#---------------------------------------------------------------
+# STEP 8b: Temporal analysis (annual trends, seasonal patterns)
+#---------------------------------------------------------------
+cat("STEP 8b: Temporal analysis...\n")
+cat("-------------------------------------------\n")
+source("04_temporal_analysis.R")
 cat("\n")
 
 #---------------------------------------------------------------
@@ -150,11 +142,11 @@ cat("  tables/definition_properties.csv     – event property table\n")
 cat("  tables/definition_change.csv         – period change table\n")
 cat("  figures/clustering.png               – ACF / temporal clustering\n")
 cat("  figures/exeve_changes.png            – severity/intensity changes\n")
-cat("  figures/drivers.png                  – evap vs prec scatter\n")
-cat("  figures/onset_termination.png        – event onset/termination\n")
 cat("  figures/implications.png             – P-E budget (all/ExEvE/non)\n")
 cat("  figures/implications_monthly.png     – monthly P-E budget\n")
-cat("  figures/wet_days.png                 – day-of-extreme analysis\n\n")
+cat("  figures/wet_days.png                 – day-of-extreme analysis\n")
+cat("  figures/map_event_*.png              – spatial maps (frequency, duration, change)\n")
+cat("  figures/timeseries_*.png             – temporal trends (annual, duration)\n\n")
 
 cat("To explore results interactively:\n")
 cat("  exeves <- readRDS('data/exeves_std_europe_med.rds')\n")

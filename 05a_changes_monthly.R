@@ -13,14 +13,12 @@ cat("Loading data...\n")
 exeves <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 prec   <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 
-exeves[, month := factor(month(date, label = TRUE))]
-
-# Merge with precipitation
-exeves_changes <- merge(exeves, prec[, .(grid_id, date, prec = value)],
-                        by = c('grid_id', 'date'))
-
-exeves_changes <- exeves_changes[, .(grid_id, period, month, event_80_95_id,
-                                      evap = value, prec)]
+# Merge with precipitation – keyed join
+setkey(exeves, grid_id, date)
+setkey(prec, grid_id, date)
+exeves_changes <- prec[, .(grid_id, date, prec = value)][exeves, on = .(grid_id, date), nomatch = 0]
+exeves_changes <- exeves_changes[, .(grid_id, period, month = month(date, label = TRUE),
+                                      event_80_95_id, evap = value, prec)]
 
 exeves_changes[, conditions := ordered('ExEvE')]
 exeves_changes[is.na(event_80_95_id), conditions := ordered('non-ExEvE')]

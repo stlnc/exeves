@@ -5,9 +5,6 @@ library(data.table)
 library(ggplot2)
 library(lubridate)
 
-# Memory optimization settings
-setDTthreads(1)  # Reduce parallel threads to save memory
-
 # Load paths and data
 load("paths.Rdata")
 region <- 'europe_med'
@@ -56,7 +53,7 @@ p1 <- ggplot(annual_stats, aes(x = year, y = events_per_cell)) +
   geom_smooth(method = "lm", se = TRUE, color = "darkred", linetype = "dashed") +
   geom_vline(xintercept = 2001.5, linetype = "dotted", color = "gray40") +
   labs(title = "Annual Extreme Event Frequency",
-       subtitle = "Mean events per grid cell (Q80/Q95 definition)",
+       subtitle = "Mean events per grid cell, Q80/Q95 (1981-2020)",
        x = "Year", y = "Events per cell") +
   theme_minimal() +
   theme(
@@ -72,7 +69,7 @@ rm(p1); gc()
 p2 <- ggplot(monthly_stats, aes(x = month, y = events_per_cell)) +
   geom_col(fill = "steelblue", alpha = 0.8) +
   labs(title = "Monthly Distribution of Extreme Events",
-       subtitle = "Mean events per grid cell by month (1981-2022)",
+       subtitle = "Mean events per grid cell by month (1981-2020)",
        x = "Month", y = "Events per cell") +
   theme_minimal() +
   theme(
@@ -93,7 +90,7 @@ seasonal_comparison_long <- melt(seasonal_comparison, id.vars = "season",
 p3 <- ggplot(seasonal_comparison_long, aes(x = season, y = events, fill = period)) +
   geom_col(position = "dodge", alpha = 0.8) +
   scale_fill_manual(values = c("up_to_2001" = "steelblue", "after_2001" = "darkorange2"),
-                    labels = c("1981-2001", "2002-2022")) +
+                    labels = c("1981-2001", "2002-2020")) +
   labs(title = "Seasonal Event Frequency by Period",
        subtitle = "Mean events per grid cell",
        x = "Season", y = "Events per cell", fill = "Period") +

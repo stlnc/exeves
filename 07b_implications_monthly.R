@@ -19,20 +19,21 @@ exeves    <- readRDS(paste0(PATH_OUTPUT_DATA, 'exeves_std_', region, '.rds'))
 prec      <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 evap_grid <- readRDS(paste0(PATH_OUTPUT_DATA, 'grid_', region, '.rds'))
 
-# Prepare merge
-prec_sub <- copy(prec[, .(grid_id, date, value)])
-setnames(prec_sub, "value", "prec")
-exeves_prec <- merge(exeves, prec_sub, by = c('grid_id', 'date'), all.x = TRUE)
-setnames(exeves_prec, "value", "evap")
-rm(prec_sub); gc()
+# Keyed update-join: add prec column in-place
+setkey(exeves, grid_id, date)
+setkey(prec,   grid_id, date)
+exeves[prec, prec := i.value, on = .(grid_id, date)]
+setnames(exeves, "value", "evap")
+exeves_prec <- exeves
+rm(prec); gc()
 
 #===============================================================================
 # Helper: build monthly P-E data and classify changes
 #===============================================================================
 build_monthly_pe <- function(dt) {
-  pe_sums <- unique(dt[, .(evap = sum(evap) / (SUB_PERIOD_YEARS * GRID_CELL_N),
-                            prec = sum(prec) / (SUB_PERIOD_YEARS * GRID_CELL_N),
-                            diff_pe = (sum(prec) - sum(evap)) / (SUB_PERIOD_YEARS * GRID_CELL_N)),
+  pe_sums <- unique(dt[, .(evap = sum(evap, na.rm = TRUE) / (SUB_PERIOD_YEARS * GRID_CELL_N),
+                            prec = sum(prec, na.rm = TRUE) / (SUB_PERIOD_YEARS * GRID_CELL_N),
+                            diff_pe = (sum(prec, na.rm = TRUE) - sum(evap, na.rm = TRUE)) / (SUB_PERIOD_YEARS * GRID_CELL_N)),
                        by = .(period, month(date))])
   pe_sums <- pe_sums[, .(prec, evap, diff_pe,
                           diff_prec = diff(prec),

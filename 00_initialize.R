@@ -1,5 +1,11 @@
 # Creates project paths and defines constants for Europe/Mediterranean ExEvEs analysis
 # Adapted from imarkonis/ithaca/projects/exeves/stable/czechia/
+# Guard: skip re-initialization if already loaded (e.g. via run_all.R)
+if (!exists("EXEVES_INIT_DONE") || !isTRUE(EXEVES_INIT_DONE)) {
+
+# Maximise data.table thread usage
+library(data.table)
+setDTthreads(0)  # use all available cores
 
 #===============================================================================
 # PATHS
@@ -64,6 +70,19 @@ PALETTES <- list(
 EVAP_NC_FILE <- paste0(PATH_OUTPUT_RAW, "gleam_e_mm_med_198001_202412_025_daily.nc")
 PREC_NC_FILE <- paste0(PATH_OUTPUT_RAW, "mswep-v2-8_tp_mm_med_197901_202012_025_daily.nc")
 
+#===============================================================================
+# CACHED RDS READER  –  avoids redundant disk reads when running via run_all.R
+# Usage:  dt <- cached_readRDS("exeves_std_europe_med", paste0(PATH_OUTPUT_DATA, "exeves_std_europe_med.rds"))
+#===============================================================================
+cached_readRDS <- function(var_name, file_path, envir = .GlobalEnv) {
+  if (exists(var_name, envir = envir, inherits = FALSE)) {
+    cat("  [cache hit]", var_name, "\n")
+    return(get(var_name, envir = envir))
+  }
+  cat("  [reading]", basename(file_path), "\n")
+  readRDS(file_path)
+}
+
 cat("Paths initialized successfully!\n")
 cat("  Data     :", PATH_OUTPUT_DATA, "\n")
 cat("  Figures  :", PATH_OUTPUT_FIGURES, "\n")
@@ -71,3 +90,6 @@ cat("  Tables   :", PATH_OUTPUT_TABLES, "\n")
 cat("  Region   :", region, "\n")
 cat("  Period   :", as.character(START_PERIOD_1), "to", as.character(END_PERIOD_2), "\n")
 cat("  Split at :", as.character(END_PERIOD_1), "\n")
+
+EXEVES_INIT_DONE <- TRUE
+} # end init guard

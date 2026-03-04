@@ -4,9 +4,6 @@
 library(data.table)
 library(ggplot2)
 library(ggpubr)
-library(dplyr)
-library(purrr)
-library(cowplot)
 
 # Load paths and constants
 load("paths.Rdata")
@@ -75,8 +72,8 @@ dummy <- dummy[conditions == "ExEvE" & variable %in% c("evap"),
                .(grid_id, month, variable, ratio_total, ratio_exeves)]
 
 to_plot_1 <- dummy[, .(median = median(ratio_total, na.rm = TRUE),
-                        q95 = quantile(ratio_total, 0.99),
-                        q05 = quantile(ratio_total, 0.01),
+                        q95 = quantile(ratio_total, 0.99, na.rm = TRUE),
+                        q05 = quantile(ratio_total, 0.01, na.rm = TRUE),
                         Conditions = factor('All days')), .(month, variable)]
 to_plot_2 <- dummy[, .(median = median(ratio_exeves, na.rm = TRUE),
                         q95 = quantile(ratio_exeves, 0.99, na.rm = TRUE),
@@ -85,9 +82,14 @@ to_plot_2 <- dummy[, .(median = median(ratio_exeves, na.rm = TRUE),
 to_plot <- rbind(to_plot_1, to_plot_2)
 to_plot <- melt(to_plot, id.vars = c('month', 'variable', 'Conditions'), variable.name = 'stat')
 
+# Compute dynamic y-axis limits for polar plot
+y_max_polar <- max(to_plot[stat == 'median']$value, na.rm = TRUE)
+y_ceil <- ceiling(y_max_polar)
+y_grid <- seq(1, y_ceil)
+
 monthly_plot_sum <- ggplot() +
-  geom_hline(aes(yintercept = y), data.frame(y = c(1:7)), color = "lightgrey") +
-  geom_hline(aes(yintercept = y), data.frame(y = c(0, 8)), color = '#536878', alpha = .9) +
+  geom_hline(aes(yintercept = y), data.frame(y = y_grid), color = "lightgrey") +
+  geom_hline(aes(yintercept = y), data.frame(y = c(0, y_ceil + 1)), color = '#536878', alpha = .9) +
   geom_col(data = to_plot[stat == 'median' & Conditions == 'ExEvEs'],
            aes(x = month, y = value, fill = value),
            position = "dodge2", show.legend = TRUE, alpha = .8) +
@@ -96,10 +98,12 @@ monthly_plot_sum <- ggplot() +
   geom_line(data = to_plot[Conditions == 'All days'],
             aes(x = month, y = value), color = '#536878') +
   geom_segment(data = to_plot[stat == 'median' & Conditions == 'ExEvEs'],
-               aes(x = month, y = 0, xend = month, yend = 8),
+               aes(x = month, y = 0, xend = month, yend = y_ceil + 1),
                color = '#536878', linetype = 'dotted') +
   coord_polar() +
-  scale_y_continuous(limits = c(-1.5, 8.5)) +
+  scale_y_continuous(
+    limits = c(-y_ceil * 0.2, (y_ceil + 1) * 1.05)
+  ) +
   scale_fill_gradientn("Ratio", colours = c('grey97', colset_subdued_prof[2])) +
   guides(fill = guide_colorsteps(barwidth = 9, barheight = .5,
                                   title.position = "top", title.hjust = .5)) +
@@ -118,7 +122,12 @@ monthly_plot_sum <- ggplot() +
 # SPATIAL PLOT
 #===============================================================================
 cat("Creating spatial plot...\n")
-colnames(spatial_changes)[6] <- 'Ratio'
+setnames(spatial_changes, "ratio", "Ratio")
+
+# Remove Inf/NaN ratios and clip outliers for readable colour scale
+spatial_changes <- spatial_changes[is.finite(Ratio)]
+ratio_lims <- quantile(spatial_changes$Ratio, c(0.01, 0.99), na.rm = TRUE)
+spatial_changes[, Ratio := pmin(pmax(Ratio, ratio_lims[1]), ratio_lims[2])]
 
 lon_range <- evap_grid[, range(lon)]
 lat_range <- evap_grid[, range(lat)]
