@@ -117,6 +117,9 @@ monthly_plot_sum <- ggplot() +
 cat("Creating spatial plot...\n")
 setnames(spatial_changes, "ratio", "Ratio")
 
+# Remove Inf/NaN ratios and cap extremes for readable colour scale
+spatial_changes <- spatial_changes[is.finite(Ratio)]
+
 lon_range <- evap_grid[, range(lon)]
 lat_range <- evap_grid[, range(lat)]
 

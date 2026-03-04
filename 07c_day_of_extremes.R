@@ -62,10 +62,19 @@ exeves_prec[, event_day_of_first_prec_max := suppressWarnings(min(event_day_of_p
 exeves_prec[is.infinite(event_day_of_first_extreme), event_day_of_first_extreme := NA_real_]
 exeves_prec[is.infinite(event_day_of_first_prec_max), event_day_of_first_prec_max := NA_real_]
 
-# Select the most common event duration for visualisation
+# Select event duration for visualisation
+# Short durations (1-3 days) produce degenerate density/line plots;
+# pick the most common duration >= MIN_VIZ_DURATION for richer dynamics
+MIN_VIZ_DURATION <- 4L
 dur_counts <- exeves_prec[, .(N = uniqueN(paste(grid_id, event_80_95_id))), by = event_duration]
-MODAL_DURATION <- dur_counts[which.max(N), event_duration]
-cat("  Most common event duration:", MODAL_DURATION, "days\n")
+dur_above <- dur_counts[event_duration >= MIN_VIZ_DURATION]
+if (nrow(dur_above) > 0) {
+  MODAL_DURATION <- dur_above[which.max(N), event_duration]
+} else {
+  MODAL_DURATION <- dur_counts[which.max(N), event_duration]
+}
+cat("  Visualisation duration:", MODAL_DURATION, "days\n")
+cat("  Events at that duration:", dur_counts[event_duration == MODAL_DURATION, N], "\n")
 
 #===============================================================================
 # Panel A: Density of first extreme / first prec-max day

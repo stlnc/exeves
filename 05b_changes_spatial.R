@@ -105,10 +105,14 @@ saveRDS(exeve_properties_change, file = paste0(PATH_OUTPUT, 'spatial_changes.rds
 
 cat("Spatial changes saved.\n")
 
-# Quick validation plot
-ggplot(event_evap_severity_period[period == "up_to_2001"]) +
-  geom_tile(aes(lon, lat, fill = ratio)) +
-  scale_fill_gradient2(low = "navyblue", mid = "grey90", high = "darkred", midpoint = 1) +
+# Quick validation plot (cap extreme ratios for readable colour scale)
+plot_dt <- event_evap_severity_period[period == "up_to_2001" & is.finite(ratio)]
+ratio_cap <- quantile(plot_dt$ratio, c(0.02, 0.98), na.rm = TRUE)
+plot_dt[, ratio_cap := pmin(pmax(ratio, ratio_cap[1]), ratio_cap[2])]
+ggplot(plot_dt) +
+  geom_tile(aes(lon, lat, fill = ratio_cap)) +
+  scale_fill_gradient2(low = "navyblue", mid = "grey90", high = "darkred", midpoint = 1,
+                       name = "Ratio") +
   theme_minimal()
 ggsave(paste0(PATH_OUTPUT_FIGURES, "spatial_changes_validation.png"), width = 10, height = 8)
 
