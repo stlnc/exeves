@@ -65,7 +65,7 @@ exeves_prec[is.infinite(event_day_of_first_prec_max), event_day_of_first_prec_ma
 # Select event duration for visualisation
 # Short durations (1-3 days) produce degenerate density/line plots;
 # pick the most common duration >= MIN_VIZ_DURATION for richer dynamics
-MIN_VIZ_DURATION <- 4L
+MIN_VIZ_DURATION <- 6L
 dur_counts <- exeves_prec[, .(N = uniqueN(paste(grid_id, event_80_95_id))), by = event_duration]
 dur_above <- dur_counts[event_duration >= MIN_VIZ_DURATION]
 if (nrow(dur_above) > 0) {
