@@ -18,6 +18,7 @@ prec      <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 setkey(exeves, grid_id, date)
 setkey(prec,   grid_id, date)
 exeves[prec, prec := i.value, on = .(grid_id, date)]
+exeves <- exeves[!is.na(prec)]   # keep only days present in both datasets (inner-join semantics)
 
 # Add spatial coordinates via keyed update
 setkey(evap_grid, grid_id)

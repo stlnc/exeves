@@ -17,6 +17,7 @@ prec   <- readRDS(paste0(PATH_OUTPUT_DATA, region, '_prec_grid.rds'))
 setkey(exeves, grid_id, date)
 setkey(prec,   grid_id, date)
 exeves[prec, prec := i.value, on = .(grid_id, date)]
+exeves <- exeves[!is.na(prec)]   # inner-join semantics: keep only days with prec data
 exeves_drivers <- exeves
 rm(exeves, prec); gc()
 

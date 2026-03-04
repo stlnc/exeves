@@ -172,4 +172,4 @@ ggarrange(gg_extreme_day, gg_mean_day, gg_wet_ratio,
 ggsave(paste0(PATH_OUTPUT_FIGURES, "wet_days.png"), width = 9, height = 12)
 
 cat("Saved:", paste0(PATH_OUTPUT_FIGURES, "wet_days.png"), "\n")
-rm(exeves, prec, exeves_prec, exeves_all); gc()
+rm(exeves, exeves_prec, exeves_all); gc()
