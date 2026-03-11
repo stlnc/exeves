@@ -200,16 +200,51 @@ bootstrap_one <- function(seed, events_dt, pool, tol) {
   c(boot_lag_median = lag_med, boot_deltaP_mean = dP)
 }
 
-cat("Running Monte Carlo null simulations in parallel (mclapply, fork)...\n")
+run_in_parallel_with_progress <- function(seeds, worker_fun, label, chunk_size = NULL) {
+  if (is.null(chunk_size)) {
+    chunk_size <- max(20L, N_CORES * 5L)
+  }
+
+  chunks <- split(seeds, ceiling(seq_along(seeds) / chunk_size))
+  n_chunks <- length(chunks)
+  out_chunks <- vector("list", n_chunks)
+
+  cat(label, "\n")
+  pb <- txtProgressBar(min = 0, max = n_chunks, style = 3)
+  t0 <- Sys.time()
+
+  for (i in seq_len(n_chunks)) {
+    out_chunks[[i]] <- mclapply(chunks[[i]], worker_fun,
+                                mc.cores = N_CORES, mc.set.seed = FALSE)
+    setTxtProgressBar(pb, i)
+
+    if (i %% 5L == 0L || i == n_chunks) {
+      elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+      rate <- i / max(elapsed, 1e-6)
+      eta <- (n_chunks - i) / max(rate, 1e-6)
+      cat(sprintf("  %s: chunk %d/%d | elapsed %.1f min | ETA %.1f min\n",
+                  label, i, n_chunks, elapsed / 60, eta / 60))
+    }
+  }
+
+  close(pb)
+  do.call(c, out_chunks)
+}
+
 sim_seeds <- 100000L + seq_len(N_SIM)
-sim_out <- mclapply(sim_seeds, function(s) simulate_one(s, events, run_pool, DURATION_TOL),
-                    mc.cores = N_CORES, mc.set.seed = FALSE)
+sim_out <- run_in_parallel_with_progress(
+  sim_seeds,
+  function(s) simulate_one(s, events, run_pool, DURATION_TOL),
+  label = "Monte Carlo"
+)
 null_dt <- as.data.table(do.call(rbind, sim_out))
 
-cat("Running bootstrap uncertainty in parallel...\n")
 boot_seeds <- 200000L + seq_len(N_BOOT)
-boot_out <- mclapply(boot_seeds, function(s) bootstrap_one(s, events, run_pool, DURATION_TOL),
-                     mc.cores = N_CORES, mc.set.seed = FALSE)
+boot_out <- run_in_parallel_with_progress(
+  boot_seeds,
+  function(s) bootstrap_one(s, events, run_pool, DURATION_TOL),
+  label = "Bootstrap"
+)
 boot_dt <- as.data.table(do.call(rbind, boot_out))
 
 #===============================================================================
