@@ -200,35 +200,17 @@ bootstrap_one <- function(seed, events_dt, pool, tol) {
   c(boot_lag_median = lag_med, boot_deltaP_mean = dP)
 }
 
-cat("Starting parallel backend...\n")
-cl <- makeCluster(N_CORES)
-on.exit(try(stopCluster(cl), silent = TRUE), add = TRUE)
-
-# Export only required objects/functions to workers
-clusterExport(
-  cl,
-  varlist = c(
-    "events",
-    "run_pool",
-    "DURATION_TOL",
-    "sample_control_mean_prec",
-    "simulate_one",
-    "bootstrap_one"
-  ),
-  envir = environment()
-)
-
-cat("Running Monte Carlo null simulations in parallel...\n")
+cat("Running Monte Carlo null simulations in parallel (mclapply, fork)...\n")
 sim_seeds <- 100000L + seq_len(N_SIM)
-sim_out <- parLapply(cl, sim_seeds, function(s) simulate_one(s, events, run_pool, DURATION_TOL))
+sim_out <- mclapply(sim_seeds, function(s) simulate_one(s, events, run_pool, DURATION_TOL),
+                    mc.cores = N_CORES, mc.set.seed = FALSE)
 null_dt <- as.data.table(do.call(rbind, sim_out))
 
 cat("Running bootstrap uncertainty in parallel...\n")
 boot_seeds <- 200000L + seq_len(N_BOOT)
-boot_out <- parLapply(cl, boot_seeds, function(s) bootstrap_one(s, events, run_pool, DURATION_TOL))
+boot_out <- mclapply(boot_seeds, function(s) bootstrap_one(s, events, run_pool, DURATION_TOL),
+                     mc.cores = N_CORES, mc.set.seed = FALSE)
 boot_dt <- as.data.table(do.call(rbind, boot_out))
-
-stopCluster(cl)
 
 #===============================================================================
 # 6. INFERENCE SUMMARY
