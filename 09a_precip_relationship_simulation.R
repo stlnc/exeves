@@ -128,9 +128,10 @@ sample_control_mean_prec <- function(grid_id, month, duration, pool, tol = 2L) {
     eligible <- which(runs$len >= d)
     if (length(eligible) == 0L) next
 
-    i_run <- sample(eligible, 1L)
+    i_run <- if (length(eligible) == 1L) eligible else sample(eligible, 1L)
     vec <- runs$prec_vec[[i_run]]
     max_start <- runs$len[i_run] - d + 1L
+    if (max_start < 1L) next
     i_start <- if (max_start == 1L) 1L else sample.int(max_start, 1L)
     return(mean(vec[i_start:(i_start + d - 1L)], na.rm = TRUE))
   }
