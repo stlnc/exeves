@@ -114,7 +114,7 @@ run_tbl <- non_evt[, .(
 ), by = .(grid_id, month, run_id)]
 
 run_tbl[, key := paste(grid_id, month, sep = "_")]
-run_pool <- split(run_tbl[, .(len, prec_vec)], by = run_tbl$key, keep.by = FALSE)
+run_pool <- split(run_tbl[, .(key, len, prec_vec)], by = "key", keep.by = FALSE)
 
 rm(non_evt, run_tbl); gc()
 
