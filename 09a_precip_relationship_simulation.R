@@ -24,35 +24,24 @@ load(paste0(PATH_OUTPUT_DATA, "grid_cell_n.Rdata"))
 #===============================================================================
 # SETTINGS
 #===============================================================================
-N_SIM <- 2000L
-N_BOOT <- 1000L
+N_SIM <- 300L
+N_BOOT <- 200L
 MIN_DURATION <- 3L
 DURATION_TOL <- 2L
-MAX_EVENTS_INFERENCE <- suppressWarnings(as.integer(Sys.getenv("EXEVES_MAX_EVENTS_INFERENCE", unset = "200000")))
+MAX_EVENTS_INFERENCE <- 100000L
+EVENTS_PER_REPLICATE <- 10000L
+CHUNK_SIZE <- 40L
 
-# Use scheduler allocation when available; override with EXEVES_N_CORES.
-# Override with Sys.setenv(EXEVES_N_CORES = "<n>")
-cores_env <- suppressWarnings(as.integer(Sys.getenv("EXEVES_N_CORES", unset = "")))
-sched_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "")))
-if (is.na(sched_cores)) sched_cores <- suppressWarnings(as.integer(Sys.getenv("PBS_NP", unset = "")))
-if (is.na(sched_cores)) sched_cores <- suppressWarnings(as.integer(Sys.getenv("NSLOTS", unset = "")))
-if (is.na(sched_cores)) sched_cores <- suppressWarnings(as.integer(Sys.getenv("OMP_NUM_THREADS", unset = "")))
+# Fixed core policy: use up to 16 logical cores when available.
 detected <- parallel::detectCores(logical = TRUE)
 if (is.na(detected) || detected < 1L) detected <- 1L
-if (is.na(cores_env)) {
-  if (is.na(sched_cores)) {
-    N_CORES <- max(1L, detected - 1L)
-  } else {
-    N_CORES <- max(1L, min(sched_cores, detected))
-  }
-} else {
-  N_CORES <- max(1L, min(cores_env, detected))
-}
+N_CORES <- max(1L, min(16L, detected))
 
 cat("Running 09a simulation analysis...\n")
 cat("  N_SIM      :", N_SIM, "\n")
 cat("  N_BOOT     :", N_BOOT, "\n")
 cat("  Max events :", MAX_EVENTS_INFERENCE, "\n")
+cat("  Events/rep :", EVENTS_PER_REPLICATE, "\n")
 cat("  Cores used :", N_CORES, "/", detected, "\n")
 
 set.seed(42)
@@ -186,27 +175,32 @@ cat("  Observed mean DeltaP:", round(obs_deltaP, 4), "\n")
 simulate_one <- function(seed, events_dt, pool, tol) {
   set.seed(seed)
 
+  n_take <- min(EVENTS_PER_REPLICATE, nrow(events_dt))
+  idx <- sample.int(nrow(events_dt), n_take)
+  ev <- events_dt[idx]
+
   # Null lag: random precip-peak day within each event duration
-  null_peak <- vapply(events_dt$duration, function(d) sample.int(d, 1L), integer(1))
-  null_lag <- null_peak - events_dt$event_day_of_first_extreme
+  null_peak <- vapply(ev$duration, function(d) sample.int(d, 1L), integer(1))
+  null_lag <- null_peak - ev$event_day_of_first_extreme
   null_lag_median <- median(null_lag, na.rm = TRUE)
 
   # Null DeltaP: event mean prec vs matched non-event random windows
   ctrl <- mapply(
     FUN = sample_control_mean_prec,
-    grid_id = events_dt$grid_id,
-    month = events_dt$month,
-    duration = events_dt$duration,
+    grid_id = ev$grid_id,
+    month = ev$month,
+    duration = ev$duration,
     MoreArgs = list(pool = pool, tol = tol)
   )
-  null_deltaP_mean <- mean(events_dt$mean_prec_event - ctrl, na.rm = TRUE)
+  null_deltaP_mean <- mean(ev$mean_prec_event - ctrl, na.rm = TRUE)
 
   c(null_lag_median = null_lag_median, null_deltaP_mean = null_deltaP_mean)
 }
 
 bootstrap_one <- function(seed, events_dt, pool, tol) {
   set.seed(seed)
-  idx <- sample.int(nrow(events_dt), nrow(events_dt), replace = TRUE)
+  n_take <- min(EVENTS_PER_REPLICATE, nrow(events_dt))
+  idx <- sample.int(nrow(events_dt), n_take, replace = TRUE)
   samp <- events_dt[idx]
 
   lag_med <- median(samp$lag, na.rm = TRUE)
@@ -257,7 +251,8 @@ sim_seeds <- 100000L + seq_len(N_SIM)
 sim_out <- run_in_parallel_with_progress(
   sim_seeds,
   function(s) simulate_one(s, events_inf, run_pool, DURATION_TOL),
-  label = "Monte Carlo"
+  label = "Monte Carlo",
+  chunk_size = CHUNK_SIZE
 )
 null_dt <- as.data.table(do.call(rbind, sim_out))
 
@@ -265,7 +260,8 @@ boot_seeds <- 200000L + seq_len(N_BOOT)
 boot_out <- run_in_parallel_with_progress(
   boot_seeds,
   function(s) bootstrap_one(s, events_inf, run_pool, DURATION_TOL),
-  label = "Bootstrap"
+  label = "Bootstrap",
+  chunk_size = CHUNK_SIZE
 )
 boot_dt <- as.data.table(do.call(rbind, boot_out))
 
@@ -358,6 +354,8 @@ saveRDS(
   list(
     settings = list(N_SIM = N_SIM, N_BOOT = N_BOOT, N_CORES = N_CORES,
                     MIN_DURATION = MIN_DURATION, DURATION_TOL = DURATION_TOL,
+                    EVENTS_PER_REPLICATE = EVENTS_PER_REPLICATE,
+                    CHUNK_SIZE = CHUNK_SIZE,
                     MAX_EVENTS_INFERENCE = MAX_EVENTS_INFERENCE),
     observed = list(obs_lag_median = obs_lag_median, obs_deltaP = obs_deltaP),
     null = null_dt,
@@ -371,5 +369,5 @@ cat("Saved:", paste0(PATH_OUTPUT_FIGURES, "precip_relationship_simulation.png"),
 cat("Saved:", paste0(PATH_OUTPUT_TABLES, "precip_relationship_summary.csv"), "\n")
 cat("Saved:", paste0(PATH_OUTPUT_DATA, "precip_relationship_null_bootstrap.rds"), "\n")
 
-rm(exeves, evt, events, run_pool, null_dt, boot_dt, boot_long, summary_dt); gc()
+rm(exeves, evt, events, events_inf, run_pool, null_dt, boot_dt, boot_long, summary_dt); gc()
 cat("09a simulation analysis complete.\n")
