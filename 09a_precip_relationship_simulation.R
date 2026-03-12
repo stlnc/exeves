@@ -154,7 +154,7 @@ sample_control_mean_prec <- function(grid_id, month, duration, pool, tol = 2L) {
 # 4. OBSERVED EFFECTS
 #===============================================================================
 cat("Computing observed effects...\n")
-obs_lag_median <- events_inf[!is.na(lag), median(lag, na.rm = TRUE)]
+obs_lag_mean <- events_inf[!is.na(lag), mean(lag, na.rm = TRUE)]
 
 set.seed(123)
 obs_ctrl <- mapply(
@@ -166,7 +166,7 @@ obs_ctrl <- mapply(
 )
 obs_deltaP <- mean(events_inf$mean_prec_event - obs_ctrl, na.rm = TRUE)
 
-cat("  Observed median lag:", round(obs_lag_median, 3), "\n")
+cat("  Observed mean lag:", round(obs_lag_mean, 3), "\n")
 cat("  Observed mean DeltaP:", round(obs_deltaP, 4), "\n")
 
 #===============================================================================
@@ -182,19 +182,28 @@ simulate_one <- function(seed, events_dt, pool, tol) {
   # Null lag: random precip-peak day within each event duration
   null_peak <- vapply(ev$duration, function(d) sample.int(d, 1L), integer(1))
   null_lag <- null_peak - ev$event_day_of_first_extreme
-  null_lag_median <- median(null_lag, na.rm = TRUE)
+  null_lag_mean <- mean(null_lag, na.rm = TRUE)
 
-  # Null DeltaP: event mean prec vs matched non-event random windows
-  ctrl <- mapply(
+  # Null DeltaP: draw TWO independent control windows and difference them.
+  # Under H0 (no precip anomaly during ExEvEs) both sides are non-event
+  # windows, so expected DeltaP = 0.
+  pseudo_event <- mapply(
     FUN = sample_control_mean_prec,
     grid_id = ev$grid_id,
     month = ev$month,
     duration = ev$duration,
     MoreArgs = list(pool = pool, tol = tol)
   )
-  null_deltaP_mean <- mean(ev$mean_prec_event - ctrl, na.rm = TRUE)
+  pseudo_ctrl <- mapply(
+    FUN = sample_control_mean_prec,
+    grid_id = ev$grid_id,
+    month = ev$month,
+    duration = ev$duration,
+    MoreArgs = list(pool = pool, tol = tol)
+  )
+  null_deltaP_mean <- mean(pseudo_event - pseudo_ctrl, na.rm = TRUE)
 
-  c(null_lag_median = null_lag_median, null_deltaP_mean = null_deltaP_mean)
+  c(null_lag_mean = null_lag_mean, null_deltaP_mean = null_deltaP_mean)
 }
 
 bootstrap_one <- function(seed, events_dt, pool, tol) {
@@ -203,7 +212,7 @@ bootstrap_one <- function(seed, events_dt, pool, tol) {
   idx <- sample.int(nrow(events_dt), n_take, replace = TRUE)
   samp <- events_dt[idx]
 
-  lag_med <- median(samp$lag, na.rm = TRUE)
+  lag_mn <- mean(samp$lag, na.rm = TRUE)
   ctrl <- mapply(
     FUN = sample_control_mean_prec,
     grid_id = samp$grid_id,
@@ -213,7 +222,7 @@ bootstrap_one <- function(seed, events_dt, pool, tol) {
   )
   dP <- mean(samp$mean_prec_event - ctrl, na.rm = TRUE)
 
-  c(boot_lag_median = lag_med, boot_deltaP_mean = dP)
+  c(boot_lag_mean = lag_mn, boot_deltaP_mean = dP)
 }
 
 run_in_parallel_with_progress <- function(seeds, worker_fun, label, chunk_size = NULL) {
@@ -268,21 +277,23 @@ boot_dt <- as.data.table(do.call(rbind, boot_out))
 #===============================================================================
 # 6. INFERENCE SUMMARY
 #===============================================================================
-# Two-sided p-values against null distributions
-p_lag <- mean(abs(null_dt$null_lag_median) >= abs(obs_lag_median), na.rm = TRUE)
+# Lag: one-sided test — is observed mean lag closer to zero than null?
+# (Under H0 the peak falls randomly in the event window → positive expected lag)
+p_lag <- mean(null_dt$null_lag_mean <= obs_lag_mean, na.rm = TRUE)
+# DeltaP: two-sided — null now centered at 0 (two independent control windows)
 p_dP  <- mean(abs(null_dt$null_deltaP_mean) >= abs(obs_deltaP), na.rm = TRUE)
 
-ci_lag <- quantile(boot_dt$boot_lag_median, probs = c(0.025, 0.975), na.rm = TRUE)
+ci_lag <- quantile(boot_dt$boot_lag_mean, probs = c(0.025, 0.975), na.rm = TRUE)
 ci_dP  <- quantile(boot_dt$boot_deltaP_mean, probs = c(0.025, 0.975), na.rm = TRUE)
 
 summary_dt <- data.table(
-  metric = c("median_lag_days", "mean_deltaP_mm_day"),
-  observed = c(obs_lag_median, obs_deltaP),
-  null_mean = c(mean(null_dt$null_lag_median, na.rm = TRUE),
+  metric = c("mean_lag_days", "mean_deltaP_mm_day"),
+  observed = c(obs_lag_mean, obs_deltaP),
+  null_mean = c(mean(null_dt$null_lag_mean, na.rm = TRUE),
                 mean(null_dt$null_deltaP_mean, na.rm = TRUE)),
-  null_sd = c(sd(null_dt$null_lag_median, na.rm = TRUE),
+  null_sd = c(sd(null_dt$null_lag_mean, na.rm = TRUE),
               sd(null_dt$null_deltaP_mean, na.rm = TRUE)),
-  p_value_two_sided = c(p_lag, p_dP),
+  p_value = c(p_lag, p_dP),
   ci_2.5 = c(ci_lag[1], ci_dP[1]),
   ci_97.5 = c(ci_lag[2], ci_dP[2])
 )
@@ -296,14 +307,14 @@ print(summary_dt)
 cat("Creating plots...\n")
 
 # Panel A: Null distribution of lag statistic
-p1 <- ggplot(null_dt, aes(x = null_lag_median)) +
+p1 <- ggplot(null_dt, aes(x = null_lag_mean)) +
   geom_histogram(bins = 45, fill = PALETTES$subdued_prof[1], color = "white") +
-  geom_vline(xintercept = obs_lag_median, color = PALETTES$subdued_prof[4], linewidth = 0.9) +
-  xlab("Null median lag (prec peak day - extreme evap day)") +
+  geom_vline(xintercept = obs_lag_mean, color = PALETTES$subdued_prof[4], linewidth = 0.9) +
+  xlab("Null mean lag (prec peak day - extreme evap day)") +
   ylab("Simulation count") +
   labs(subtitle = paste0(
-    "Observed=", round(obs_lag_median, 2),
-    " | p=", signif(p_lag, 3)
+    "Observed=", round(obs_lag_mean, 2),
+    " | p(one-sided)=", signif(p_lag, 3)
   )) +
   theme_linedraw()
 
@@ -321,8 +332,8 @@ p2 <- ggplot(null_dt, aes(x = null_deltaP_mean)) +
 
 # Panel C: Bootstrap spread with 95% CI
 boot_long <- rbind(
-  data.table(metric = "Median lag (days)", value = boot_dt$boot_lag_median,
-             observed = obs_lag_median, ci_lo = ci_lag[1], ci_hi = ci_lag[2]),
+  data.table(metric = "Mean lag (days)", value = boot_dt$boot_lag_mean,
+             observed = obs_lag_mean, ci_lo = ci_lag[1], ci_hi = ci_lag[2]),
   data.table(metric = "Mean DeltaP (mm/day)", value = boot_dt$boot_deltaP_mean,
              observed = obs_deltaP, ci_lo = ci_dP[1], ci_hi = ci_dP[2])
 )
@@ -357,7 +368,7 @@ saveRDS(
                     EVENTS_PER_REPLICATE = EVENTS_PER_REPLICATE,
                     CHUNK_SIZE = CHUNK_SIZE,
                     MAX_EVENTS_INFERENCE = MAX_EVENTS_INFERENCE),
-    observed = list(obs_lag_median = obs_lag_median, obs_deltaP = obs_deltaP),
+    observed = list(obs_lag_mean = obs_lag_mean, obs_deltaP = obs_deltaP),
     null = null_dt,
     bootstrap = boot_dt,
     summary = summary_dt
