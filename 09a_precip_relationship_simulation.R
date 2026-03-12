@@ -24,8 +24,8 @@ load(paste0(PATH_OUTPUT_DATA, "grid_cell_n.Rdata"))
 #===============================================================================
 # SETTINGS
 #===============================================================================
-N_SIM <- 300L
-N_BOOT <- 200L
+N_SIM <- 1000L
+N_BOOT <- 500L
 MIN_DURATION <- 3L
 DURATION_TOL <- 2L
 MAX_EVENTS_INFERENCE <- 100000L
@@ -308,25 +308,25 @@ cat("Creating plots...\n")
 
 # Panel A: Null distribution of lag statistic
 p1 <- ggplot(null_dt, aes(x = null_lag_mean)) +
-  geom_histogram(bins = 45, fill = PALETTES$subdued_prof[1], color = "white") +
+  geom_density(fill = PALETTES$subdued_prof[1], alpha = 0.6, color = NA) +
   geom_vline(xintercept = obs_lag_mean, color = PALETTES$subdued_prof[4], linewidth = 0.9) +
-  xlab("Null mean lag (prec peak day - extreme evap day)") +
-  ylab("Simulation count") +
+  xlab("Null mean lag (prec peak day \u2212 extreme evap day)") +
+  ylab("Density") +
   labs(subtitle = paste0(
-    "Observed=", round(obs_lag_mean, 2),
-    " | p(one-sided)=", signif(p_lag, 3)
+    "Observed = ", round(obs_lag_mean, 2),
+    " | p(one-sided) = ", signif(p_lag, 3)
   )) +
   theme_linedraw()
 
 # Panel B: Null distribution of DeltaP statistic
 p2 <- ggplot(null_dt, aes(x = null_deltaP_mean)) +
-  geom_histogram(bins = 45, fill = PALETTES$subdued_prof[1], color = "white") +
+  geom_density(fill = PALETTES$subdued_prof[1], alpha = 0.6, color = NA) +
   geom_vline(xintercept = obs_deltaP, color = PALETTES$subdued_prof[4], linewidth = 0.9) +
-  xlab("Null mean DeltaP (event - matched control, mm/day)") +
-  ylab("Simulation count") +
+  xlab("Null mean \u0394P (event \u2212 matched control, mm/day)") +
+  ylab("Density") +
   labs(subtitle = paste0(
-    "Observed=", round(obs_deltaP, 3),
-    " | p=", signif(p_dP, 3)
+    "Observed = ", round(obs_deltaP, 3),
+    " | p = ", signif(p_dP, 3)
   )) +
   theme_linedraw()
 
@@ -339,13 +339,13 @@ boot_long <- rbind(
 )
 
 p3 <- ggplot(boot_long, aes(x = value)) +
-  geom_histogram(bins = 45, fill = PALETTES$subdued_prof[2], color = "white") +
+  geom_density(fill = PALETTES$subdued_prof[2], alpha = 0.6, color = NA) +
   geom_vline(aes(xintercept = observed), color = PALETTES$subdued_prof[4], linewidth = 0.9) +
   geom_vline(aes(xintercept = ci_lo), linetype = 2, color = "gray35") +
   geom_vline(aes(xintercept = ci_hi), linetype = 2, color = "gray35") +
-  facet_wrap(~ metric, scales = "free_x", ncol = 1) +
+  facet_wrap(~ metric, scales = "free", ncol = 1) +
   xlab("Bootstrap statistic value") +
-  ylab("Bootstrap count") +
+  ylab("Density") +
   labs(subtitle = "Dashed lines = 95% bootstrap CI") +
   theme_linedraw()
 
