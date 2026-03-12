@@ -28,14 +28,23 @@ N_SIM <- 2000L
 N_BOOT <- 1000L
 MIN_DURATION <- 3L
 DURATION_TOL <- 2L
+MAX_EVENTS_INFERENCE <- suppressWarnings(as.integer(Sys.getenv("EXEVES_MAX_EVENTS_INFERENCE", unset = "200000")))
 
-# Default: use available CPUs conservatively (all but one, capped at 6)
+# Use scheduler allocation when available; override with EXEVES_N_CORES.
 # Override with Sys.setenv(EXEVES_N_CORES = "<n>")
 cores_env <- suppressWarnings(as.integer(Sys.getenv("EXEVES_N_CORES", unset = "")))
+sched_cores <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "")))
+if (is.na(sched_cores)) sched_cores <- suppressWarnings(as.integer(Sys.getenv("PBS_NP", unset = "")))
+if (is.na(sched_cores)) sched_cores <- suppressWarnings(as.integer(Sys.getenv("NSLOTS", unset = "")))
+if (is.na(sched_cores)) sched_cores <- suppressWarnings(as.integer(Sys.getenv("OMP_NUM_THREADS", unset = "")))
 detected <- parallel::detectCores(logical = TRUE)
 if (is.na(detected) || detected < 1L) detected <- 1L
 if (is.na(cores_env)) {
-  N_CORES <- max(1L, min(6L, detected - 1L))
+  if (is.na(sched_cores)) {
+    N_CORES <- max(1L, detected - 1L)
+  } else {
+    N_CORES <- max(1L, min(sched_cores, detected))
+  }
 } else {
   N_CORES <- max(1L, min(cores_env, detected))
 }
@@ -43,6 +52,7 @@ if (is.na(cores_env)) {
 cat("Running 09a simulation analysis...\n")
 cat("  N_SIM      :", N_SIM, "\n")
 cat("  N_BOOT     :", N_BOOT, "\n")
+cat("  Max events :", MAX_EVENTS_INFERENCE, "\n")
 cat("  Cores used :", N_CORES, "/", detected, "\n")
 
 set.seed(42)
@@ -98,6 +108,18 @@ if (nrow(events) == 0L) {
   stop("No events remain after filtering. Reduce MIN_DURATION or check inputs.")
 }
 
+# For Monte Carlo/Bootstrap, cap event count to keep runtime tractable on HPC.
+events_inf <- events
+if (!is.na(MAX_EVENTS_INFERENCE) && MAX_EVENTS_INFERENCE > 0L && nrow(events_inf) > MAX_EVENTS_INFERENCE) {
+  cat("  Downsampling events for inference to:", MAX_EVENTS_INFERENCE, "\n")
+  frac <- MAX_EVENTS_INFERENCE / nrow(events_inf)
+  events_inf <- events_inf[, .SD[sample.int(.N, max(1L, floor(.N * frac)))], by = .(period, month)]
+  if (nrow(events_inf) > MAX_EVENTS_INFERENCE) {
+    events_inf <- events_inf[sample.int(.N, MAX_EVENTS_INFERENCE)]
+  }
+  cat("  Events used for inference:", nrow(events_inf), "\n")
+}
+
 #===============================================================================
 # 3. BUILD NON-EXEVE CONTROL POOL (by grid_id x month, contiguous runs)
 #===============================================================================
@@ -143,17 +165,17 @@ sample_control_mean_prec <- function(grid_id, month, duration, pool, tol = 2L) {
 # 4. OBSERVED EFFECTS
 #===============================================================================
 cat("Computing observed effects...\n")
-obs_lag_median <- events[!is.na(lag), median(lag, na.rm = TRUE)]
+obs_lag_median <- events_inf[!is.na(lag), median(lag, na.rm = TRUE)]
 
 set.seed(123)
 obs_ctrl <- mapply(
   FUN = sample_control_mean_prec,
-  grid_id = events$grid_id,
-  month = events$month,
-  duration = events$duration,
+  grid_id = events_inf$grid_id,
+  month = events_inf$month,
+  duration = events_inf$duration,
   MoreArgs = list(pool = run_pool, tol = DURATION_TOL)
 )
-obs_deltaP <- mean(events$mean_prec_event - obs_ctrl, na.rm = TRUE)
+obs_deltaP <- mean(events_inf$mean_prec_event - obs_ctrl, na.rm = TRUE)
 
 cat("  Observed median lag:", round(obs_lag_median, 3), "\n")
 cat("  Observed mean DeltaP:", round(obs_deltaP, 4), "\n")
@@ -234,7 +256,7 @@ run_in_parallel_with_progress <- function(seeds, worker_fun, label, chunk_size =
 sim_seeds <- 100000L + seq_len(N_SIM)
 sim_out <- run_in_parallel_with_progress(
   sim_seeds,
-  function(s) simulate_one(s, events, run_pool, DURATION_TOL),
+  function(s) simulate_one(s, events_inf, run_pool, DURATION_TOL),
   label = "Monte Carlo"
 )
 null_dt <- as.data.table(do.call(rbind, sim_out))
@@ -242,7 +264,7 @@ null_dt <- as.data.table(do.call(rbind, sim_out))
 boot_seeds <- 200000L + seq_len(N_BOOT)
 boot_out <- run_in_parallel_with_progress(
   boot_seeds,
-  function(s) bootstrap_one(s, events, run_pool, DURATION_TOL),
+  function(s) bootstrap_one(s, events_inf, run_pool, DURATION_TOL),
   label = "Bootstrap"
 )
 boot_dt <- as.data.table(do.call(rbind, boot_out))
@@ -335,7 +357,8 @@ write.csv(summary_dt,
 saveRDS(
   list(
     settings = list(N_SIM = N_SIM, N_BOOT = N_BOOT, N_CORES = N_CORES,
-                    MIN_DURATION = MIN_DURATION, DURATION_TOL = DURATION_TOL),
+                    MIN_DURATION = MIN_DURATION, DURATION_TOL = DURATION_TOL,
+                    MAX_EVENTS_INFERENCE = MAX_EVENTS_INFERENCE),
     observed = list(obs_lag_median = obs_lag_median, obs_deltaP = obs_deltaP),
     null = null_dt,
     bootstrap = boot_dt,
